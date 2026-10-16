@@ -4,7 +4,7 @@
 
 Writes three figures:
   q1_throughput.png  time vs grid size, one line per backend (best config)
-  q1_scaling.png     Numba speedup vs threads, with an Amdahl's-law fit
+  q1_scaling.png     Numba speedup vs threads (static vs dynamic rows), Amdahl fit
   q1_error.png       pixel error rate per JFA variant and site density
 """
 
@@ -95,24 +95,37 @@ def plot_scaling(rows: list[dict], out: Path, variant: str, density: float) -> N
     if not numba:
         return
     size = max(r["size"] for r in numba)
-    pts = sorted((r["threads"], r["median_s"]) for r in numba if r["size"] == size)
-    base = dict(pts).get(1)
-    if base is None or len(pts) < 2:
-        return
-    threads = np.array([t for t, _ in pts], dtype=float)
-    speedup = np.array([base / s for _, s in pts])
-    (p,), _ = curve_fit(amdahl, threads, speedup, p0=[0.9], bounds=(0.0, 1.0))
+    # Rows from before the schedule option existed were static prange.
+    by_sched: dict[str, list[tuple[int, float]]] = defaultdict(list)
+    for r in numba:
+        if r["size"] == size:
+            by_sched[r.get("schedule") or "static"].append((r["threads"], r["median_s"]))
 
     fig, ax = plt.subplots(figsize=(7, 4.5), facecolor=SURFACE)
-    xs = np.linspace(1, threads.max(), 100)
+    tmax = max(t for pts in by_sched.values() for t, _ in pts)
+    xs = np.linspace(1, tmax, 100)
     ax.plot(xs, xs, color=MUTED, linewidth=1, linestyle="--", label="ideal (linear)")
-    ax.plot(xs, amdahl(xs, p), color=MUTED, linewidth=2,
-            label=f"Amdahl fit, parallel fraction p = {p:.3f}")
     color, label = SERIES["numba-cpu"]
-    ax.plot(threads, speedup, color=color, linewidth=2, marker="o", markersize=8,
-            markeredgecolor=SURFACE, markeredgewidth=2, label=f"{label} (measured)")
-    ax.annotate(f"{speedup[-1]:.1f}x", (threads[-1], speedup[-1]), xytext=(6, 0),
-                textcoords="offset points", va="center", color=INK, fontsize=9)
+    # Same hue for both schedules (same backend); static is the lighter,
+    # dashed "before" line, dynamic the solid one.
+    looks = {"static": dict(color="#f2a582", linestyle="--"),
+             "dynamic": dict(color=color, linestyle="-")}
+    for sched in ("static", "dynamic"):
+        pts = sorted(by_sched.get(sched, []))
+        base = dict(pts).get(1)
+        if base is None or len(pts) < 2:
+            continue
+        threads = np.array([t for t, _ in pts], dtype=float)
+        speedup = np.array([base / m for _, m in pts])
+        ax.plot(threads, speedup, linewidth=2, marker="o", markersize=8,
+                markeredgecolor=SURFACE, markeredgewidth=2,
+                label=f"{label}, {sched} rows (measured)", **looks[sched])
+        ax.annotate(f"{speedup[-1]:.1f}x", (threads[-1], speedup[-1]), xytext=(6, 0),
+                    textcoords="offset points", va="center", color=INK, fontsize=9)
+        if sched == "dynamic" or "dynamic" not in by_sched:
+            (p,), _ = curve_fit(amdahl, threads, speedup, p0=[0.9], bounds=(0.0, 1.0))
+            ax.plot(xs, amdahl(xs, p), color=MUTED, linewidth=2,
+                    label=f"Amdahl fit ({sched}), parallel fraction p = {p:.3f}")
     style(ax, f"Numba strong scaling, {size}x{size} grid ({variant})",
           "threads", "speedup vs 1 thread")
     ax.legend(frameon=False, fontsize=9, labelcolor=INK)

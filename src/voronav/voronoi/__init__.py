@@ -31,9 +31,11 @@ def make_runner(
     variant: str = "jfa+1",
     device: str = "cpu",
     threads: int | None = None,
+    schedule: str = "dynamic",
 ) -> tuple[Callable[[], None], Callable[[], np.ndarray]]:
     """Return (run, fetch). `run()` executes JFA and blocks until it is done;
-    `fetch()` returns the last result as a numpy array."""
+    `fetch()` returns the last result as a numpy array. `schedule` is
+    numba-only ("dynamic" or "static" row distribution)."""
     init = init_nearest(sites)
     steps = step_schedule(*sites.shape, variant)
     result: dict[str, object] = {}
@@ -51,7 +53,7 @@ def make_runner(
         from . import jfa_numba
 
         def run() -> None:
-            result["out"] = jfa_numba.run_steps(init, steps, threads)
+            result["out"] = jfa_numba.run_steps(init, steps, threads, schedule)
 
         def fetch() -> np.ndarray:
             return result["out"]  # type: ignore[return-value]
@@ -79,8 +81,9 @@ def voronoi(
     variant: str = "jfa+1",
     device: str = "cpu",
     threads: int | None = None,
+    schedule: str = "dynamic",
 ) -> np.ndarray:
     """Nearest-site grid (flat site index per pixel, NO_SITE if no sites)."""
-    run, fetch = make_runner(sites, backend, variant, device, threads)
+    run, fetch = make_runner(sites, backend, variant, device, threads, schedule)
     run()
     return fetch()

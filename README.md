@@ -25,7 +25,7 @@ studied only as the high-dimensional Voronoi chapter (Q5).
 
 | # | Question | Status |
 | --- | --- | --- |
-| Q1 | How does parallel JFA scale across backends, threads and grid size, and how much error does each variant leave? | **first results in** (below); GPU and scheduling follow-ups open |
+| Q1 | How does parallel JFA scale across backends, threads and grid size, and how much error does each variant leave? | **results in** (below); GPU and scheduling causes measured and fixed |
 | Q2 | Voronoi roadmap vs grid A* vs RRT*: clearance, length, time, success | planned (weeks 3–4) |
 | Q3 | How does segmentation error carry through to path safety? | planned (week 5) |
 | Q4 | SAM variants on-device: latency vs mask quality vs path quality | planned (week 6) |
@@ -34,35 +34,78 @@ studied only as the high-dimensional Voronoi chapter (Q5).
 ## Q1 first results (measured, Apple M4, 10 cores)
 
 `configs/bench_q1.yaml` as committed: 4 grid sizes × 3 site densities × 4
-variants × 9 backend configs = 432 rows, median of 5 runs after 2 warmups. Raw
-data: `docs/runs/q1_results.jsonl`.
+variants × 15 backend configs (NumPy; Numba at 1–10 threads with static and
+dynamic row scheduling; PyTorch CPU and MPS) = 720 rows, median of 5 runs
+after 2 warmups. Raw data: `docs/runs/q1_results.jsonl`. The first run, from
+before the fixes below, is kept in `docs/runs/q1_results_v1.jsonl`.
 
 ![JFA time per diagram](docs/q1/q1_throughput.png)
 
-| `jfa+1`, 2048², 0.001 sites/px | median time | vs NumPy |
-| --- | --- | --- |
-| NumPy reference | 4165 ms | 1× |
-| PyTorch CPU | 2848 ms | 1.5× |
-| PyTorch MPS (GPU) | 1478 ms | 2.8× |
-| Numba, 1 thread | 334 ms | 12× |
-| **Numba, 8 threads** | **90 ms** | **46×** |
+| `jfa+1`, 2048², 0.001 sites/px | first run | now | vs NumPy (now) |
+| --- | --- | --- | --- |
+| NumPy reference | 4165 ms | 4144 ms | 1× |
+| PyTorch CPU (eager int64) | 2848 ms | 3140 ms | 1.3× |
+| Numba, 1 thread | 334 ms | 330 ms | 13× |
+| Numba, 10 threads, dynamic rows | (8 threads static: 90 ms) | 72 ms | 58× |
+| **PyTorch MPS (fused Metal kernel)** | 1478 ms (eager int64) | **15 ms** | **276×** |
 
-**The GPU loses to the CPU, and the cause is still a hypothesis.** The MPS
-kernel is 16× slower than multithreaded Numba. Two likely causes, neither
-verified yet: the int64 keys may be emulated on Apple GPUs (Metal is natively
-32-bit), and each pass allocates 9 full-grid temporaries where Numba fuses
-everything into one loop over pixels. The next experiment is an int32 encoding
-(separate int16 coordinates plus a float32 distance) with a fused kernel.
+All of these produce the same output, bit for bit (`tests/test_backends_agree.py`).
+
+**The GPU was slow because of unfused ops plus emulated 64-bit division.
+Allocation was not the problem.** Both hypotheses from the first run were
+measured one at a time (`scripts/probe_mps.py`, output in
+`docs/runs/q1_mps_probe.json`, 2048², `jfa+1`):
+
+| implementation | time | what changed |
+| --- | --- | --- |
+| eager PyTorch, int64 (old backend) | 1441 ms | 141 aten ops per pass, each a full-grid kernel |
+| eager PyTorch, int32 | 825 ms | same ops, half the bytes |
+| `torch.compile` of the int64 pass | 142 ms | ops fused by Inductor, still int64 math |
+| fused Metal kernel, int64 storage + int64 math | 158 ms | one kernel per pass, packed int64 key |
+| … int64 storage, a single int64 division per pixel | 45 ms | coordinates split with int32 division |
+| … int64 storage, int32 math | 16 ms | no 64-bit arithmetic at all |
+| **fused Metal kernel, int32 (new backend)** | **14 ms** | int32 storage and math |
+
+- *Allocation (H2): rejected as stated.* Writing into a preallocated `out=`
+  tensor is no faster than allocating (int32 add: 0.85 vs 0.90 ms). PyTorch's
+  caching allocator makes allocation cheap. The real cost is what those
+  temporaries imply: about 141 separate kernels per pass, each streaming whole
+  grids through memory. Every eager op takes about the same time whatever it
+  computes (add, floor-divide and remainder are all about 1.4 ms in int64), so
+  the eager path is bandwidth-bound. Fusing the work into one kernel gives about 9×.
+- *int64 (H1): confirmed, but only for division.* In eager mode int64 costs
+  exactly its bytes: 1.7× over int32, with no sign of emulation. Inside a fused
+  kernel, where memory traffic no longer dominates, int64 storage costs only
+  10% (16 vs 14 ms). But 64-bit integer division and modulo are emulated on
+  the Apple GPU: one per pixel triples the pass time, and the ten in the
+  packed-key kernel make it 11× slower. `torch.compile` lands at the same
+  ~145 ms for the same reason.
+- *The fix:* one Metal kernel per pass (`torch.mps.compile_shader`) that
+  keeps site indices and distances in int32. It compares `(d2, site)`
+  lexicographically instead of building the packed int64 key, which orders
+  candidates exactly the same way. Output is converted back to int64, so the
+  API is unchanged. Grids over 2³¹ pixels or 46340 px per side fall back to
+  the eager int64 path (`jfa_torch.fused_supported`). At 256² and 512² the
+  GPU sits at a ~1.2 ms floor of launch and sync overhead, which is still
+  slightly faster than Numba at 256² (1.3 ms).
 
 ![Numba strong scaling](docs/q1/q1_scaling.png)
 
-**Scaling follows the M4's core layout, not Amdahl's law.** Speedup is nearly
-linear up to 4 threads (3.4×), then falls back at 6 threads (3.1×) and peaks at
-3.7× at 8. The M4 has 4 performance cores and 6 efficiency cores. Once work
-spreads to efficiency cores, statically split rows finish unevenly and the
-slowest thread sets the pace. The Amdahl fit (p = 0.83) is included only to show
-that a single parallel fraction cannot describe this curve. Dynamic scheduling
-(smaller chunks of rows) is the next step.
+**The 6-thread dip was load imbalance from static row splitting. Dynamic
+scheduling removes it.** With `prange`'s static split, speedup at 2048² rises
+to 3.3× at 4 threads, falls to 3.1× at 6, and ends at 3.6× at 10. The M4 has 4
+performance and 6 efficiency cores, and each thread gets the same number of
+rows, so the efficiency-core threads finish last. The fix that looks obvious
+does nothing: `numba.set_parallel_chunksize` still gave every thread exactly
+H / threads rows on both the workqueue and OpenMP layers, and timings did not
+change. (A compute-only kernel with no memory traffic shows no dip, so the
+efficiency cores fall further behind on JFA's memory-heavy passes.) The Numba
+backend now claims rows 4 at a time from a shared atomic counter (an LLVM
+`atomicrmw` through `numba.extending.intrinsic`), so faster cores take more
+rows. Speedup is now monotonic: 3.4× at 4, 3.8× at 6, 4.1× at 8, 4.6× at 10
+(72 ms). Chunks of 1, 4 and 16 rows measured within noise. The Amdahl fit
+(p = 0.875) describes the dynamic curve reasonably; what remains is the
+efficiency cores being slower, not a serial fraction.
 
 ![JFA error by variant](docs/q1/q1_error.png)
 
@@ -82,7 +125,9 @@ throttling and background load.
   flat index of each pixel's nearest site, or -1 if there are no sites.
 - **Bit-identical backends.** Every backend compares the packed integer key
   `d2 * H*W + site`, so ties break the same way regardless of visit order or
-  thread scheduling. Backends are checked against each other with
+  thread scheduling. (The int32 Metal kernel compares `(d2, site)`
+  lexicographically instead, which gives the same order without 64-bit
+  math.) Backends are checked against each other with
   `array_equal`, not a tolerance, which means a speedup in Q1 never comes with
   an accuracy caveat.
 - **Error is measured on distance, not labels.** JFA can only choose among the
@@ -113,10 +158,11 @@ src/voronav/
     common.py          representation, tie-break, step schedules, distance
     oracle.py          brute-force exact diagram
     jfa_numpy.py       reference JFA
-    jfa_numba.py       multithreaded CPU JFA
-    jfa_torch.py       GPU JFA (MPS / CUDA) + CPU
+    jfa_numba.py       multithreaded CPU JFA (dynamic or static row scheduling)
+    jfa_torch.py       fused int32 Metal kernel on MPS; eager int64 on CPU / CUDA
 configs/               debug.yaml (seconds), bench_q1.yaml (full Q1 sweep)
-scripts/               bench_jfa.py (harness -> JSONL), plot_q1.py (figures)
+scripts/               bench_jfa.py (harness -> JSONL), plot_q1.py (figures),
+                       probe_mps.py (why eager MPS was slow)
 tests/                 property, cross-backend, loader, config, end-to-end
 ```
 
@@ -131,7 +177,7 @@ python3 -m venv .venv && .venv/bin/pip install -e ".[dev,torch]"
 
 ## Testing
 
-109 tests run in about 20 s on a laptop with no downloads. Every property test
+126 tests run in about 20 s on a laptop with no downloads. Every property test
 runs on every available backend (NumPy, Numba, PyTorch CPU, and MPS or CUDA
 when present).
 
@@ -142,8 +188,10 @@ when present).
   degenerate shapes (1×1, 1×N, N×1) are handled; the error rate is pinned on
   fixed seeds, and the extra pass in `jfa+1` never increases it.
 - **Cross-backend:** Numba, Torch CPU and Torch MPS match the NumPy reference
-  bit for bit on sparse, dense and obstacle maps for every variant, and Numba
-  gives the same output at any thread count.
+  bit for bit on sparse, dense and obstacle maps for every variant. Numba
+  gives the same output at any thread count, schedule and chunk size. Both
+  MPS paths (the fused Metal kernel and eager int64) are tested separately,
+  including on a site lattice full of exact ties.
 - **End to end:** the benchmark harness and the plotting script run on the debug config
   and produce well-formed rows and figures.
 

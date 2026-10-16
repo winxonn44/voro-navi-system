@@ -3,7 +3,8 @@
 #
 # Sizes stop at 2048: the NumPy reference is the slow baseline and must still
 # finish. Thread counts cover 1..10 for the M4's 10 cores (4P + 6E — expect the
-# speedup curve to bend at 4, where efficiency cores take over).
+# speedup curve to bend at 4, where efficiency cores take over). Both Numba
+# schedules run so the static-vs-dynamic comparison comes from the same sweep.
 map:
   kind: points
 
@@ -13,6 +14,7 @@ bench:
   backends: [numpy, numba, torch]
   variants: [jfa, jfa+1, jfa+2, 1+jfa]
   numba_threads: [1, 2, 4, 6, 8, 10]
+  numba_schedules: [static, dynamic]
   torch_devices: [cpu, mps]
   repeats: 5
   warmup: 2

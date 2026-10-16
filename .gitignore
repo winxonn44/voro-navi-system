@@ -7,3 +7,4 @@ __pycache__/
 data/raw/
 .DS_Store
 runs_*.log
+.ipynb_checkpoints/

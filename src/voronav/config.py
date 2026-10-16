@@ -14,6 +14,7 @@ import yaml
 
 BACKENDS = ("numpy", "numba", "torch")
 VARIANTS = ("jfa", "jfa+1", "jfa+2", "1+jfa")
+NUMBA_SCHEDULES = ("dynamic", "static")
 MAP_KINDS = ("points", "obstacles", "corridor", "movingai", "image")
 
 
@@ -56,6 +57,7 @@ class BenchConfig:
     backends: list[str] = field(default_factory=lambda: ["numpy", "numba"])
     variants: list[str] = field(default_factory=lambda: ["jfa+1"])
     numba_threads: list[int] = field(default_factory=lambda: [1])
+    numba_schedules: list[str] = field(default_factory=lambda: ["dynamic"])
     torch_devices: list[str] = field(default_factory=lambda: ["cpu"])
     repeats: int = 5
     warmup: int = 1
@@ -70,6 +72,9 @@ class BenchConfig:
         for v in self.variants:
             if v not in VARIANTS:
                 raise ValueError(f"bench.variants: unknown variant {v!r}")
+        for sch in self.numba_schedules:
+            if sch not in NUMBA_SCHEDULES:
+                raise ValueError(f"bench.numba_schedules: unknown schedule {sch!r}")
         if self.repeats < 1:
             raise ValueError("bench.repeats must be >= 1")
 

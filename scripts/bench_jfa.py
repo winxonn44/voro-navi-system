@@ -80,19 +80,29 @@ def time_runner(run, warmup: int, repeats: int) -> list[float]:
     return times
 
 
+def torch_path(backend: str, device: str, size: int) -> str | None:
+    """Which torch implementation ran: the fused Metal kernel or eager ops."""
+    if backend != "torch":
+        return None
+    from voronav.voronoi.jfa_torch import fused_supported
+
+    return "metal-int32" if fused_supported(size, size, device) else "eager-int64"
+
+
 def configurations(cfg: BenchConfig):
-    """(backend, device, threads) triples to time."""
+    """(backend, device, threads, schedule) tuples to time."""
     from voronav.voronoi.jfa_numba import max_threads
 
     for backend in cfg.backends:
         if backend == "numpy":
-            yield "numpy", "cpu", 1
+            yield "numpy", "cpu", 1, None
         elif backend == "numba":
-            for t in cfg.numba_threads:
-                if t > max_threads():
-                    print(f"  skip numba threads={t} (> {max_threads()} cores)", file=sys.stderr)
-                    continue
-                yield "numba", "cpu", t
+            for sch in cfg.numba_schedules:
+                for t in cfg.numba_threads:
+                    if t > max_threads():
+                        print(f"  skip numba threads={t} (> {max_threads()} cores)", file=sys.stderr)
+                        continue
+                    yield "numba", "cpu", t, sch
         elif backend == "torch":
             from voronav.voronoi.jfa_torch import available_devices
 
@@ -100,7 +110,7 @@ def configurations(cfg: BenchConfig):
                 if d not in available_devices():
                     print(f"  skip torch device={d} (unavailable)", file=sys.stderr)
                     continue
-                yield "torch", d, None
+                yield "torch", d, None, None
 
 
 def main() -> None:
@@ -127,8 +137,10 @@ def main() -> None:
                 true_d2 = exact_d2(sites) if bench.measure_error else None
                 for variant in bench.variants:
                     err = None
-                    for backend, device, threads in combos:
-                        run, fetch = make_runner(sites, backend, variant, device, threads)
+                    for backend, device, threads, schedule in combos:
+                        run, fetch = make_runner(
+                            sites, backend, variant, device, threads, schedule or "dynamic"
+                        )
                         times = time_runner(run, bench.warmup, bench.repeats)
                         if true_d2 is not None and err is None:
                             err = error_stats(fetch(), true_d2)
@@ -143,6 +155,8 @@ def main() -> None:
                             "backend": backend,
                             "device": device,
                             "threads": threads,
+                            "schedule": schedule,
+                            "torch_path": torch_path(backend, device, size),
                             "times_s": times,
                             "median_s": statistics.median(times),
                             "min_s": min(times),
@@ -152,9 +166,11 @@ def main() -> None:
                         }
                         f.write(json.dumps(row) + "\n")
                         f.flush()
-                        tag = f"{backend}-{device}" + (f"-t{threads}" if backend == "numba" else "")
+                        tag = f"{backend}-{device}" + (
+                            f"-{schedule[:3]}-t{threads}" if backend == "numba" else ""
+                        )
                         print(
-                            f"size={size:5d} sites={n_sites:6d} {variant:6s} {tag:14s} "
+                            f"size={size:5d} sites={n_sites:6d} {variant:6s} {tag:18s} "
                             f"median={row['median_s'] * 1e3:9.2f} ms  "
                             f"err={row.get('error_rate', float('nan')):.2e}"
                         )

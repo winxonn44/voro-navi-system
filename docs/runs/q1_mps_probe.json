@@ -1,0 +1,64 @@
+{
+  "size": 2048,
+  "density": 0.001,
+  "variant": "jfa+1",
+  "n_passes": 12,
+  "torch": "2.14.1",
+  "elementwise_ms": {
+    "int64": {
+      "add_out": 1.3086875551380217,
+      "add_alloc": 1.3236249797046185,
+      "mul_out": 1.3058750191703439,
+      "minimum_out": 1.3200835091993213,
+      "floordiv_out": 1.3243749854154885,
+      "remainder_out": 1.3322500744834542
+    },
+    "int32": {
+      "add_out": 0.8620000444352627,
+      "add_alloc": 0.8603125461377203,
+      "mul_out": 0.8113749790936708,
+      "minimum_out": 0.8538124966435134,
+      "floordiv_out": 0.8613334503024817,
+      "remainder_out": 0.8172084926627576
+    },
+    "float32": {
+      "add_out": 0.8401249651797116,
+      "add_alloc": 0.8156039984896779,
+      "mul_out": 0.8257500012405217,
+      "minimum_out": 0.8833129541017115,
+      "floordiv_out": 0.846604467369616,
+      "remainder_out": 0.8797920309007168
+    }
+  },
+  "eager_ops_per_pass": 141,
+  "diagram_ms": {
+    "eager int64 (old backend)": {
+      "median_ms": 1441.2508750101551,
+      "bit_identical": true
+    },
+    "eager int32": {
+      "median_ms": 824.6847089612857,
+      "bit_identical": true
+    },
+    "torch.compile int64": {
+      "median_ms": 141.85791707132012,
+      "bit_identical": true
+    },
+    "metal fused, int64 storage + int64 math": {
+      "median_ms": 157.4585000053048,
+      "bit_identical": true
+    },
+    "metal fused, int64 storage, one int64 div/pixel": {
+      "median_ms": 44.62525004055351,
+      "bit_identical": true
+    },
+    "metal fused, int64 storage, int32 math": {
+      "median_ms": 15.785124967806041,
+      "bit_identical": true
+    },
+    "metal fused, int32 (new backend)": {
+      "median_ms": 14.369416981935501,
+      "bit_identical": true
+    }
+  }
+}
