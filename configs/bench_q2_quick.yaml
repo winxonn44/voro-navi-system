@@ -1,0 +1,22 @@
+# Everyday Q2 check: synthetic maps only, small grids, light load (well under
+# a minute on a fanless laptop). Not the study: few maps and queries, and
+# RRT* on every 4th query with a small budget. The study is bench_q2.yaml.
+roadmap:
+  backend: numba
+  variant: jfa+2
+
+q2:
+  maps:
+    - {kind: random_obstacles, sizes: [128, 256], seeds: [0, 1], n_shapes: 25}
+    - {kind: corridor, sizes: [128], gap: 24}
+    - {kind: two_rooms, sizes: [120]}
+  queries_per_map: 16
+  min_dist_frac: 0.333
+  seed: 0
+  robot_radius: 2.0
+  planners: [voronoi, astar, weighted_astar, rrt_star]
+  lambdas: [1, 4, 16, 64]
+  rrt_iters: 1500
+  rrt_every: 4
+  cooldown_s: 0.5
+  out_dir: runs/bench_q2_quick

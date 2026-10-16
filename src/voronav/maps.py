@@ -112,6 +112,62 @@ def load_movingai(path: str | Path) -> np.ndarray:
     return occ
 
 
+# HouseExpo resolution: 20 px/m = 5 cm cells. The dataset's own viewer uses
+# 100 px/m, which puts a typical 10-25 m house at 1000-2500 px; at 20 px/m the
+# same house is 200-500 px, inside the ~512 px budget of the Q2 benchmark,
+# while a 0.8 m door is still 16 px wide and a 10 cm interior wall 2 px thick.
+HOUSEEXPO_PX_PER_METER = 20.0
+
+
+def load_houseexpo(
+    path: str | Path, px_per_meter: float = HOUSEEXPO_PX_PER_METER, pad: int = 2
+) -> np.ndarray:
+    """Rasterize a HouseExpo floor plan (github.com/TeaganLi/HouseExpo) into
+    an occupancy grid.
+
+    The JSON's `verts` is one closed contour of the house in meters; the
+    inside is free floor and everything outside (including walls, which the
+    contour wraps around) is obstacle. A pixel is free when its center lies
+    inside the contour (even-odd rule). Rows follow +y and columns +x, as in
+    the dataset's own PNG renderer, with `pad` obstacle pixels on every side
+    so the free space is always enclosed.
+    """
+    import json
+
+    data = json.loads(Path(path).read_text())
+    try:
+        verts = np.asarray(data["verts"], dtype=np.float64)
+    except KeyError:
+        raise ValueError(f"{path}: missing 'verts'") from None
+    if verts.ndim != 2 or verts.shape[1] != 2 or len(verts) < 3:
+        raise ValueError(f"{path}: 'verts' must be a list of >= 3 (x, y) points")
+    if px_per_meter <= 0 or pad < 0:
+        raise ValueError("px_per_meter must be > 0 and pad >= 0")
+
+    lo = verts.min(axis=0)
+    px = (verts - lo) * px_per_meter  # contour in pixel units, origin at bbox min
+    width = int(np.ceil(px[:, 0].max())) + 2 * pad
+    height = int(np.ceil(px[:, 1].max())) + 2 * pad
+
+    # Scanline fill: for each row center, x-crossings of the edges that
+    # straddle it (half-open in y, so a vertex on the scanline counts once).
+    x0, y0 = px[:, 0], px[:, 1]
+    x1, y1 = np.roll(x0, -1), np.roll(y0, -1)
+    occ = np.ones((height, width), dtype=bool)
+    xc = np.arange(width) - pad + 0.5
+    for row in range(height):
+        yc = row - pad + 0.5
+        hit = (y0 <= yc) != (y1 <= yc)
+        if not hit.any():
+            continue
+        t = (yc - y0[hit]) / (y1[hit] - y0[hit])
+        xs = np.sort(x0[hit] + t * (x1[hit] - x0[hit]))
+        # even-odd: a center is inside when an odd number of crossings lie left of it
+        inside = np.searchsorted(xs, xc) % 2 == 1
+        occ[row] = ~inside
+    return occ
+
+
 def load_image_mask(path: str | Path, free_is_bright: bool = True) -> np.ndarray:
     """Load a binary PNG/JPG mask (e.g. a SAM free-space mask, a HouseExpo
     render) as an occupancy grid, thresholding at mid-gray."""

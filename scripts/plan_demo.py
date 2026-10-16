@@ -19,6 +19,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
+from voronav.map_sources import two_rooms
 from voronav.maps import random_obstacles
 from voronav.planning import (
     astar_plan,
@@ -40,17 +41,6 @@ INK = "#2b2b29"
 MUTED = "#8a897f"
 OBSTACLE = "#3d3d3a"
 ROADMAP = "#c9c8c0"
-
-
-def two_rooms(h: int = 120, w: int = 200) -> np.ndarray:
-    occ = np.ones((h, w), dtype=bool)
-    mid = w // 2
-    occ[3:-3, 3 : mid - 2] = False
-    occ[3:-3, mid + 2 : -3] = False
-    occ[h // 2 - 6 : h // 2 + 6, mid - 2 : mid + 2] = False  # door
-    occ[20:45, 30:60] = True  # furniture
-    occ[70:100, 140:150] = True
-    return occ
 
 
 def panel(ax, occ, start, goal, title, robot_radius=2.0, seed=0):

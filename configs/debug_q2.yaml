@@ -1,0 +1,12 @@
+# Tiny Q2 config: the whole planner harness in a few seconds. Used by the
+# smoke test.
+q2:
+  maps:
+    - {kind: random_obstacles, sizes: [64], seeds: [0, 1], n_shapes: 6}
+    - {kind: two_rooms, sizes: [60]}
+  queries_per_map: 3
+  planners: [voronoi, astar, weighted_astar, rrt_star]
+  lambdas: [4, 32]
+  rrt_iters: 150
+  rrt_every: 2
+  out_dir: runs/debug_q2

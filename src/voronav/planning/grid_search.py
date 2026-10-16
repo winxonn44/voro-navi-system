@@ -11,6 +11,13 @@ a corner: both orthogonal neighbors it passes must be in `corner_ok` (the
 MovingAI benchmark rule). `corner_ok` is separate from `passable` so the
 roadmap search can step diagonally along a skeleton line while still being
 checked against the real free space.
+
+Optional per-pixel step-cost multiplier (`cost_mult`, all >= 1): a move
+costs its length times the multiplier of the pixel it enters, e.g.
+1 + lambda / clearance for clearance-weighted A*. Because every multiplier is
+>= 1, the octile heuristic still never overestimates, so A* stays optimal.
+Without `cost_mult` the search takes the original branch, so unweighted
+results are bit-identical to the version before weights existed.
 """
 
 from __future__ import annotations
@@ -77,7 +84,7 @@ def _pop(keys, vals, size):
 
 
 @njit(cache=True)
-def _search(passable, corner_ok, starts, goal_mask, gy, gx, use_h, dys, dxs):
+def _search(passable, corner_ok, starts, goal_mask, gy, gx, use_h, dys, dxs, mult, use_w):
     h, w = passable.shape
     n = h * w
     g = np.full(n, np.inf)
@@ -112,6 +119,8 @@ def _search(passable, corner_ok, starts, goal_mask, gy, gx, use_h, dys, dxs):
                 step = np.sqrt(2.0)
             else:
                 step = 1.0
+            if use_w:
+                step = step * mult[vy, vx]
             v = vy * w + vx
             if closed[v]:
                 continue
@@ -128,7 +137,8 @@ def _search(passable, corner_ok, starts, goal_mask, gy, gx, use_h, dys, dxs):
 @dataclass
 class SearchResult:
     path: np.ndarray | None  # int64 [N, 2] (y, x) pixels, start first
-    cost: float              # path length in pixels (inf if not found)
+    cost: float              # path length in pixels, or weighted cost with
+                             # cost_mult (inf if not found)
     expansions: int          # nodes closed: the planner's work, independent of wall time
 
 
@@ -139,10 +149,12 @@ def search(
     goal_mask: np.ndarray | None = None,
     corner_ok: np.ndarray | None = None,
     start_mask: np.ndarray | None = None,
+    cost_mult: np.ndarray | None = None,
 ) -> SearchResult:
     """A* to `goal` (octile heuristic) or Dijkstra to the nearest pixel of
     `goal_mask` (exactly one of the two), from `start` or from every pixel of
-    `start_mask` at once (exactly one of the two)."""
+    `start_mask` at once (exactly one of the two). `cost_mult` (float [H, W],
+    >= 1 on passable pixels) scales the cost of entering each pixel."""
     if (goal is None) == (goal_mask is None):
         raise ValueError("give exactly one of goal / goal_mask")
     if (start is None) == (start_mask is None):
@@ -158,6 +170,16 @@ def search(
             raise ValueError("start_mask has no passable pixels")
     if corner_ok is None:
         corner_ok = passable
+    if cost_mult is None:
+        mult, use_w = np.ones((1, 1)), False
+    else:
+        if cost_mult.shape != (h, w):
+            raise ValueError("cost_mult must have the grid's shape")
+        mult = np.ascontiguousarray(cost_mult, dtype=np.float64)
+        # >= 1 keeps the octile heuristic admissible (NaN fails this too)
+        if not (mult[passable] >= 1.0).all():
+            raise ValueError("cost_mult must be >= 1 on passable pixels")
+        use_w = True
     if goal is not None:
         goal_mask = np.zeros((h, w), dtype=np.bool_)
         goal_mask[goal] = True
@@ -169,7 +191,7 @@ def search(
         np.ascontiguousarray(corner_ok, dtype=np.bool_),
         starts,
         np.ascontiguousarray(goal_mask, dtype=np.bool_),
-        gy, gx, use_h, _DY, _DX,
+        gy, gx, use_h, _DY, _DX, mult, use_w,
     )
     if found < 0:
         return SearchResult(None, float("inf"), int(expansions))

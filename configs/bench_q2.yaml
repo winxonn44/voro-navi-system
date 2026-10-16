@@ -1,0 +1,27 @@
+# Full Q2 study: Voronoi roadmap vs grid A* vs clearance-weighted A* vs RRT*.
+# Run plugged in; RRT* (pure Python) dominates the wall time.
+#   python scripts/bench_plan.py --config configs/bench_q2.yaml
+# Directory sources fail loudly if their folder is missing or empty: fetch
+# the maps first (scripts/fetch_maps.py, docs/DATA.md) and point `dir` at
+# where they landed, or drop the entry.
+roadmap:
+  backend: numba
+  variant: jfa+2
+
+q2:
+  maps:
+    - {kind: random_obstacles, sizes: [128, 256, 512, 1024], seeds: [0, 1, 2, 3, 4], n_shapes: 25}
+    - {kind: corridor, sizes: [256], gap: 32}
+    - {kind: two_rooms, sizes: [120, 240, 480]}
+    - {kind: movingai_dir, dir: data/raw/movingai}    # 50 maps, 5 sets x 10 (docs/DATA.md)
+    - {kind: houseexpo_dir, dir: data/raw/houseexpo}  # 20 house floor plans
+  queries_per_map: 50
+  min_dist_frac: 0.333
+  seed: 0
+  robot_radius: 2.0
+  planners: [voronoi, astar, weighted_astar, rrt_star]
+  lambdas: [0.5, 1, 2, 4, 8, 16, 32, 64, 128]
+  rrt_iters: 3000
+  rrt_every: 5
+  cooldown_s: 2.0
+  out_dir: runs/bench_q2

@@ -1,9 +1,12 @@
-"""The three planners compared in Q2.
+"""The planners compared in Q2.
 
   voronoi: get onto the GVD roadmap, travel along it, get off at the goal.
            Maximum clearance by construction.
   astar:   shortest 8-connected path through safe free space. The baseline
            that the clearance claim is measured against.
+  weighted_astar: grid A* where entering a pixel costs 1 + lambda / clearance
+           per unit length. A fairer baseline than plain A*, which hugs walls
+           by construction: sweeping lambda trades length for clearance.
   rrt_star: sampling-based asymptotically optimal planner (Karaman & Frazzoli
            2011), continuous space. A path-quality baseline only: it is
            pure Python/NumPy, so its wall time is not comparable to the
@@ -94,6 +97,34 @@ def astar_plan(safe: np.ndarray, start: tuple[int, int], goal: tuple[int, int]) 
     res = search(safe, start, goal=goal)
     path = None if res.path is None else res.path.astype(np.float64)
     return PlanResult("astar", path, time.perf_counter() - t0, res.expansions)
+
+
+def clearance_cost(clearance: np.ndarray, lam: float) -> np.ndarray:
+    """Step-cost multiplier 1 + lam / clearance (>= 1; 1 where clearance is
+    inf, i.e. no obstacles; inf on obstacles, which are never entered)."""
+    if lam < 0:
+        raise ValueError("lam must be >= 0")
+    with np.errstate(divide="ignore", invalid="ignore"):
+        return np.where(clearance > 0, 1.0 + lam / clearance, np.inf)
+
+
+def weighted_astar_plan(
+    safe: np.ndarray,
+    clearance: np.ndarray,
+    start: tuple[int, int],
+    goal: tuple[int, int],
+    lam: float,
+) -> PlanResult:
+    """Clearance-weighted grid A*: step cost = step length * (1 + lam /
+    clearance of the destination pixel). lam = 0 is plain A*. The cost map is
+    built inside the timed query (one O(H*W) NumPy pass), like A*'s own
+    per-query arrays."""
+    _check_endpoints(safe, start, goal)
+    t0 = time.perf_counter()
+    res = search(safe, start, goal=goal, cost_mult=clearance_cost(clearance, lam))
+    path = None if res.path is None else res.path.astype(np.float64)
+    return PlanResult("weighted_astar", path, time.perf_counter() - t0, res.expansions,
+                      {"lam": lam, "weighted_cost": res.cost})
 
 
 # ---------------------------------------------------------------------------

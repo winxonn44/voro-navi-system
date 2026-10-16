@@ -14,6 +14,7 @@ from voronav.planning import (
     path_metrics,
     rrt_star_plan,
     voronoi_plan,
+    weighted_astar_plan,
 )
 
 EIGHT = np.ones((3, 3), dtype=bool)
@@ -101,3 +102,26 @@ def test_voronoi_fails_cleanly_without_roadmap():
     rm = build_roadmap(np.zeros((16, 16), dtype=bool))
     r = voronoi_plan(rm, (2, 2), (12, 12))
     assert not r.success and r.info["fail"] == "empty roadmap"
+
+
+def test_weighted_astar_trades_length_for_clearance():
+    occ = random_obstacles(96, 96, 8, seed=1)
+    rm = build_roadmap(occ, robot_radius=2.0)
+    clr = exact_clearance(occ)
+    lengths, clears = [], []
+    for start, goal in _queries(rm, 4, 1):
+        plain = astar_plan(rm.safe, start, goal)
+        w0 = weighted_astar_plan(rm.safe, rm.clearance, start, goal, lam=0.0)
+        assert w0.planner == "weighted_astar" and w0.info["lam"] == 0.0
+        assert np.array_equal(plain.path, w0.path)  # lam = 0 is plain A*
+        row = []
+        for lam in (0.0, 8.0, 64.0):
+            r = weighted_astar_plan(rm.safe, rm.clearance, start, goal, lam=lam)
+            m = path_metrics(r.path, clr, rm.safe)
+            assert m["collision_free"]
+            row.append(m)
+        lengths.append([m["length_px"] for m in row])
+        clears.append([m["mean_clearance_px"] for m in row])
+    lengths, clears = np.mean(lengths, axis=0), np.mean(clears, axis=0)
+    assert lengths[0] <= lengths[1] <= lengths[2]
+    assert clears[0] < clears[2]

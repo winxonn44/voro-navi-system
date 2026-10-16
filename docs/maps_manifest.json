@@ -1,0 +1,1325 @@
+{
+ "description": "Real maps for the Q2 planner study; written by scripts/fetch_maps.py --select, verified by fetch_maps.py.",
+ "houseexpo_commit": "45e2b2505f6ea1fe49c0203f14efb7ce20b94e7c",
+ "houseexpo_px_per_meter": 20.0,
+ "archives": {
+  "dao-map.zip": {
+   "url": "https://movingai.com/benchmarks/dao/dao-map.zip",
+   "sha256": "229393af31caaec732e5f4fd923940845ab056e94dadfb96b8afc24da472d3af",
+   "bytes": 807804,
+   "scen": false
+  },
+  "dao-scen.zip": {
+   "url": "https://movingai.com/benchmarks/dao/dao-scen.zip",
+   "sha256": "7a0072450ff4c04fd4cf2c5e4651b11bfa4078582ecdcee95784e5196abf69ef",
+   "bytes": 1955464,
+   "scen": true
+  },
+  "bg512-map.zip": {
+   "url": "https://movingai.com/benchmarks/bg512/bg512-map.zip",
+   "sha256": "babe4274380df5a757913ed520b988375a80879aefb43acc875caa2b32d1ed71",
+   "bytes": 299071,
+   "scen": false
+  },
+  "bg512-scen.zip": {
+   "url": "https://movingai.com/benchmarks/bg512/bg512-scen.zip",
+   "sha256": "13382dbebe28839c437c33a2c411d7ded9089821a92971d1545e0f7674a891a2",
+   "bytes": 1625571,
+   "scen": true
+  },
+  "street-map.zip": {
+   "url": "https://movingai.com/benchmarks/street/street-map.zip",
+   "sha256": "588442dee46ae99c4194831baafca2b121fe0b037de7a4c57f142e4fa55e1da8",
+   "bytes": 997213,
+   "scen": false
+  },
+  "street-scen.zip": {
+   "url": "https://movingai.com/benchmarks/street/street-scen.zip",
+   "sha256": "fed6a54c370a4041e07ec94f02aca9416d5149037151418f2908ebae28b4b6d2",
+   "bytes": 2739267,
+   "scen": true
+  },
+  "maze-map.zip": {
+   "url": "https://movingai.com/benchmarks/maze/maze-map.zip",
+   "sha256": "c89a11188104953a79bd5ab5020f82f3749cdff3bd2ba04efa7d9c62fe1eefb2",
+   "bytes": 682515,
+   "scen": false
+  },
+  "maze-scen.zip": {
+   "url": "https://movingai.com/benchmarks/maze/maze-scen.zip",
+   "sha256": "b6123a77a45e6d7ad1f8a12bd675d1b551365fac0d837fb31cea15d388b40a67",
+   "bytes": 7723091,
+   "scen": true
+  },
+  "room-map.zip": {
+   "url": "https://movingai.com/benchmarks/room/room-map.zip",
+   "sha256": "f1442dea9b6f8d828e393ea4db90a12d3d87e535c278aa392a6008e3026d5c86",
+   "bytes": 205465,
+   "scen": false
+  },
+  "room-scen.zip": {
+   "url": "https://movingai.com/benchmarks/room/room-scen.zip",
+   "sha256": "ad0dc899eb3e78cf0af1569be4e3bde8f4c6d91f00bef8736ade11c2b97c0c61",
+   "bytes": 1093624,
+   "scen": true
+  },
+  "houseexpo-json.tar.gz": {
+   "url": "https://raw.githubusercontent.com/TeaganLi/HouseExpo/45e2b2505f6ea1fe49c0203f14efb7ce20b94e7c/HouseExpo/json.tar.gz",
+   "sha256": "dad4a7d230937bdfe1d57c91330e697b625ec681eefd9cda3159082a939b4f2f",
+   "bytes": 25602801,
+   "scen": false
+  }
+ },
+ "maps": [
+  {
+   "name": "dao-arena2",
+   "set": "dao",
+   "source": "movingai",
+   "source_url": "https://movingai.com/benchmarks/dao/dao-map.zip",
+   "archive": "dao-map.zip",
+   "member": "arena2.map",
+   "path": "movingai/dao/arena2.map",
+   "sha256": "9c8255e89179fa1b8098f5744d9392ed78de479a08fda8fb170c05a10f22ce2a",
+   "height": 209,
+   "width": 281,
+   "free_fraction": 0.414,
+   "scen": {
+    "archive": "dao-scen.zip",
+    "member": "arena2.map.scen",
+    "path": "movingai/dao/arena2.map.scen",
+    "sha256": "4267bd401aa9c9d855cfe2f10cd934dfe2b674c43db9bbff95fe6cf15e3fb163"
+   }
+  },
+  {
+   "name": "dao-brc505d",
+   "set": "dao",
+   "source": "movingai",
+   "source_url": "https://movingai.com/benchmarks/dao/dao-map.zip",
+   "archive": "dao-map.zip",
+   "member": "brc505d.map",
+   "path": "movingai/dao/brc505d.map",
+   "sha256": "6f9a0cf26b257833a1d5416cf512c4c77337da2972c3c363fcc5f72122856a1a",
+   "height": 193,
+   "width": 261,
+   "free_fraction": 0.7917,
+   "scen": {
+    "archive": "dao-scen.zip",
+    "member": "brc505d.map.scen",
+    "path": "movingai/dao/brc505d.map.scen",
+    "sha256": "6943a5188c225b9e1e8e2a26d294e3279eb5c4eaca2f383b166e6d84050e1acc"
+   }
+  },
+  {
+   "name": "dao-den005d",
+   "set": "dao",
+   "source": "movingai",
+   "source_url": "https://movingai.com/benchmarks/dao/dao-map.zip",
+   "archive": "dao-map.zip",
+   "member": "den005d.map",
+   "path": "movingai/dao/den005d.map",
+   "sha256": "228cec96f01d0f3882b2bec71fd9b8ded947b57e8cdf6814865964cd2a44dd36",
+   "height": 328,
+   "width": 241,
+   "free_fraction": 0.2221,
+   "scen": {
+    "archive": "dao-scen.zip",
+    "member": "den005d.map.scen",
+    "path": "movingai/dao/den005d.map.scen",
+    "sha256": "f1e528648110feddbba6731fb397e0eee6d63778897f19c2a7a393949df7ebbc"
+   }
+  },
+  {
+   "name": "dao-den501d",
+   "set": "dao",
+   "source": "movingai",
+   "source_url": "https://movingai.com/benchmarks/dao/dao-map.zip",
+   "archive": "dao-map.zip",
+   "member": "den501d.map",
+   "path": "movingai/dao/den501d.map",
+   "sha256": "1bfafa35226f03e65d5f66e816968539c99fb2ffdfe02c3da8e3ef36b246c05d",
+   "height": 338,
+   "width": 320,
+   "free_fraction": 0.2446,
+   "scen": {
+    "archive": "dao-scen.zip",
+    "member": "den501d.map.scen",
+    "path": "movingai/dao/den501d.map.scen",
+    "sha256": "20b8ce8c792da5f4fae3280e3addbf9b52ac263f3e751c1b65bcb0f569cb137f"
+   }
+  },
+  {
+   "name": "dao-den520d",
+   "set": "dao",
+   "source": "movingai",
+   "source_url": "https://movingai.com/benchmarks/dao/dao-map.zip",
+   "archive": "dao-map.zip",
+   "member": "den520d.map",
+   "path": "movingai/dao/den520d.map",
+   "sha256": "06575cc259ea90e6dad003a72f891ab9f82cc9f5e5de4a5f46b90125a46e5f90",
+   "height": 257,
+   "width": 256,
+   "free_fraction": 0.4283,
+   "scen": {
+    "archive": "dao-scen.zip",
+    "member": "den520d.map.scen",
+    "path": "movingai/dao/den520d.map.scen",
+    "sha256": "5a0766cb1b8763682c2b39d4cc94a35c0e10277c23ca42045862ff0af01fcf59"
+   }
+  },
+  {
+   "name": "dao-hrt201d",
+   "set": "dao",
+   "source": "movingai",
+   "source_url": "https://movingai.com/benchmarks/dao/dao-map.zip",
+   "archive": "dao-map.zip",
+   "member": "hrt201d.map",
+   "path": "movingai/dao/hrt201d.map",
+   "sha256": "18f29c0e86e8e908afe45b543ed301aca099478d670e7f1292788f8daa3d0f7a",
+   "height": 272,
+   "width": 297,
+   "free_fraction": 0.2918,
+   "scen": {
+    "archive": "dao-scen.zip",
+    "member": "hrt201d.map.scen",
+    "path": "movingai/dao/hrt201d.map.scen",
+    "sha256": "b2a2ffd8a20b5fa6a9986dad076cc49481a9b51558e8250117d675f00442cc69"
+   }
+  },
+  {
+   "name": "dao-lak303d",
+   "set": "dao",
+   "source": "movingai",
+   "source_url": "https://movingai.com/benchmarks/dao/dao-map.zip",
+   "archive": "dao-map.zip",
+   "member": "lak303d.map",
+   "path": "movingai/dao/lak303d.map",
+   "sha256": "8f4bc6c57aff59ff9650683bbfc91e0c618e30f96ef72323369cb7a055a33b26",
+   "height": 194,
+   "width": 194,
+   "free_fraction": 0.3928,
+   "scen": {
+    "archive": "dao-scen.zip",
+    "member": "lak303d.map.scen",
+    "path": "movingai/dao/lak303d.map.scen",
+    "sha256": "b9a0928b1767de454dbf9029817e8880930c8ae2b7078479a598ac47ac2a42e8"
+   }
+  },
+  {
+   "name": "dao-lak506d",
+   "set": "dao",
+   "source": "movingai",
+   "source_url": "https://movingai.com/benchmarks/dao/dao-map.zip",
+   "archive": "dao-map.zip",
+   "member": "lak506d.map",
+   "path": "movingai/dao/lak506d.map",
+   "sha256": "a41d8d08f2f4dcbb8b84aaa9be358f63af07e5101edd506ffbe41798951179c6",
+   "height": 205,
+   "width": 194,
+   "free_fraction": 0.3494,
+   "scen": {
+    "archive": "dao-scen.zip",
+    "member": "lak506d.map.scen",
+    "path": "movingai/dao/lak506d.map.scen",
+    "sha256": "9bb2a685d5f45ad9da8adf87dbaced01359f90026f4a345a8deba9309408b0d0"
+   }
+  },
+  {
+   "name": "dao-orz100d",
+   "set": "dao",
+   "source": "movingai",
+   "source_url": "https://movingai.com/benchmarks/dao/dao-map.zip",
+   "archive": "dao-map.zip",
+   "member": "orz100d.map",
+   "path": "movingai/dao/orz100d.map",
+   "sha256": "5b68afc405c940d2347f73f698425036f187f6bc48b4e4ab4dfc3faa784e8391",
+   "height": 395,
+   "width": 412,
+   "free_fraction": 0.6122,
+   "scen": {
+    "archive": "dao-scen.zip",
+    "member": "orz100d.map.scen",
+    "path": "movingai/dao/orz100d.map.scen",
+    "sha256": "99de29564060e529c12acdf231f472d14ff431e66de9aeb575706a722c114824"
+   }
+  },
+  {
+   "name": "dao-ost003d",
+   "set": "dao",
+   "source": "movingai",
+   "source_url": "https://movingai.com/benchmarks/dao/dao-map.zip",
+   "archive": "dao-map.zip",
+   "member": "ost003d.map",
+   "path": "movingai/dao/ost003d.map",
+   "sha256": "2081e15b565f6285eb59308b3626a61843763a0df14756ff5906ab0bb8f34c3d",
+   "height": 194,
+   "width": 194,
+   "free_fraction": 0.3511,
+   "scen": {
+    "archive": "dao-scen.zip",
+    "member": "ost003d.map.scen",
+    "path": "movingai/dao/ost003d.map.scen",
+    "sha256": "d4064184a96e384049f3c33cf0e2ac90b81b9cc7dcff6f1b3e420ec1b36bb9c8"
+   }
+  },
+  {
+   "name": "bg512-AR0011SR",
+   "set": "bg512",
+   "source": "movingai",
+   "source_url": "https://movingai.com/benchmarks/bg512/bg512-map.zip",
+   "archive": "bg512-map.zip",
+   "member": "AR0011SR.map",
+   "path": "movingai/bg512/AR0011SR.map",
+   "sha256": "9ddd706e6334cc95525f8cb0a7f521fee0b24b9520ad50e18944b1216b0ce845",
+   "height": 512,
+   "width": 512,
+   "free_fraction": 0.4595,
+   "scen": {
+    "archive": "bg512-scen.zip",
+    "member": "AR0011SR.map.scen",
+    "path": "movingai/bg512/AR0011SR.map.scen",
+    "sha256": "6eea57b853359c7aacf337707bcf020ffd9a4f2eb47e1a830e64e4b2ee799d61"
+   }
+  },
+  {
+   "name": "bg512-AR0018SR",
+   "set": "bg512",
+   "source": "movingai",
+   "source_url": "https://movingai.com/benchmarks/bg512/bg512-map.zip",
+   "archive": "bg512-map.zip",
+   "member": "AR0018SR.map",
+   "path": "movingai/bg512/AR0018SR.map",
+   "sha256": "9681483cd8ff70d5eec54e419856536d2ea5ee8715555cbc3fd2743ff156c87d",
+   "height": 512,
+   "width": 512,
+   "free_fraction": 0.2982,
+   "scen": {
+    "archive": "bg512-scen.zip",
+    "member": "AR0018SR.map.scen",
+    "path": "movingai/bg512/AR0018SR.map.scen",
+    "sha256": "9c66b0a61e7e6f138b6c0e785b59ab4da4aed6abec8a9c6a638a07d4a9e8dcf6"
+   }
+  },
+  {
+   "name": "bg512-AR0046SR",
+   "set": "bg512",
+   "source": "movingai",
+   "source_url": "https://movingai.com/benchmarks/bg512/bg512-map.zip",
+   "archive": "bg512-map.zip",
+   "member": "AR0046SR.map",
+   "path": "movingai/bg512/AR0046SR.map",
+   "sha256": "f71b53b5624194922caf0fef8eb0217561bac2ff9f631ed0071dd6b08a1498f6",
+   "height": 512,
+   "width": 512,
+   "free_fraction": 0.4318,
+   "scen": {
+    "archive": "bg512-scen.zip",
+    "member": "AR0046SR.map.scen",
+    "path": "movingai/bg512/AR0046SR.map.scen",
+    "sha256": "e32df87ecc7c25dcf8d91aad6380eb44944d6bff970384aa9dd78f500d6abd13"
+   }
+  },
+  {
+   "name": "bg512-AR0206SR",
+   "set": "bg512",
+   "source": "movingai",
+   "source_url": "https://movingai.com/benchmarks/bg512/bg512-map.zip",
+   "archive": "bg512-map.zip",
+   "member": "AR0206SR.map",
+   "path": "movingai/bg512/AR0206SR.map",
+   "sha256": "ae8bdefdc74c013caa04d9deac6e1d30252cd1109adf0202f9297a2163de63b3",
+   "height": 512,
+   "width": 512,
+   "free_fraction": 0.207,
+   "scen": {
+    "archive": "bg512-scen.zip",
+    "member": "AR0206SR.map.scen",
+    "path": "movingai/bg512/AR0206SR.map.scen",
+    "sha256": "2ddd76d335fdec59d7ad043bac5743d85ad6a487eceb5b2525a0a1ffe1814031"
+   }
+  },
+  {
+   "name": "bg512-AR0306SR",
+   "set": "bg512",
+   "source": "movingai",
+   "source_url": "https://movingai.com/benchmarks/bg512/bg512-map.zip",
+   "archive": "bg512-map.zip",
+   "member": "AR0306SR.map",
+   "path": "movingai/bg512/AR0306SR.map",
+   "sha256": "3428e3d3716226269e53badf97232b1792065ab2f25fabf3ea251116da10541d",
+   "height": 512,
+   "width": 512,
+   "free_fraction": 0.2411,
+   "scen": {
+    "archive": "bg512-scen.zip",
+    "member": "AR0306SR.map.scen",
+    "path": "movingai/bg512/AR0306SR.map.scen",
+    "sha256": "4da400ce977e24ce7e944a2daac2098f889992242f955eed6e570987034b5c0b"
+   }
+  },
+  {
+   "name": "bg512-AR0317SR",
+   "set": "bg512",
+   "source": "movingai",
+   "source_url": "https://movingai.com/benchmarks/bg512/bg512-map.zip",
+   "archive": "bg512-map.zip",
+   "member": "AR0317SR.map",
+   "path": "movingai/bg512/AR0317SR.map",
+   "sha256": "d0be851234739ca063443b61aa13f210f1d9284b84713bf7cc79463d41931df3",
+   "height": 512,
+   "width": 512,
+   "free_fraction": 0.2741,
+   "scen": {
+    "archive": "bg512-scen.zip",
+    "member": "AR0317SR.map.scen",
+    "path": "movingai/bg512/AR0317SR.map.scen",
+    "sha256": "0dad499133b4daf76c5fb192fc034700c5c6de274092b9433ba61003ec72c95d"
+   }
+  },
+  {
+   "name": "bg512-AR0414SR",
+   "set": "bg512",
+   "source": "movingai",
+   "source_url": "https://movingai.com/benchmarks/bg512/bg512-map.zip",
+   "archive": "bg512-map.zip",
+   "member": "AR0414SR.map",
+   "path": "movingai/bg512/AR0414SR.map",
+   "sha256": "a10692963cd9f7bcb70abc380bd4200ca1dd4030d31062f24164166827db2e0b",
+   "height": 512,
+   "width": 512,
+   "free_fraction": 0.2549,
+   "scen": {
+    "archive": "bg512-scen.zip",
+    "member": "AR0414SR.map.scen",
+    "path": "movingai/bg512/AR0414SR.map.scen",
+    "sha256": "5af87de708187d460353a23ff1e11be90e8ca3f98209166a4558e724d0e87f74"
+   }
+  },
+  {
+   "name": "bg512-AR0509SR",
+   "set": "bg512",
+   "source": "movingai",
+   "source_url": "https://movingai.com/benchmarks/bg512/bg512-map.zip",
+   "archive": "bg512-map.zip",
+   "member": "AR0509SR.map",
+   "path": "movingai/bg512/AR0509SR.map",
+   "sha256": "d28fa1ea9e488edc1a52dff89dc20cc3d8570e7251bc271cb630cd58e632f931",
+   "height": 512,
+   "width": 512,
+   "free_fraction": 0.2782,
+   "scen": {
+    "archive": "bg512-scen.zip",
+    "member": "AR0509SR.map.scen",
+    "path": "movingai/bg512/AR0509SR.map.scen",
+    "sha256": "f00d75a623bcef7d7303e760ff0efd3aab7fd79ee048591773866f7a9f92beee"
+   }
+  },
+  {
+   "name": "bg512-AR0604SR",
+   "set": "bg512",
+   "source": "movingai",
+   "source_url": "https://movingai.com/benchmarks/bg512/bg512-map.zip",
+   "archive": "bg512-map.zip",
+   "member": "AR0604SR.map",
+   "path": "movingai/bg512/AR0604SR.map",
+   "sha256": "8d0f6b726c6f76ed64ea1f0d4d946ed7c63fa2d362ab643ebfc8b4c57f298ba4",
+   "height": 512,
+   "width": 512,
+   "free_fraction": 0.3493,
+   "scen": {
+    "archive": "bg512-scen.zip",
+    "member": "AR0604SR.map.scen",
+    "path": "movingai/bg512/AR0604SR.map.scen",
+    "sha256": "2d63f9068319926b11552756d5d90010bd5d5dfe16895ca31920c4b2e87e0891"
+   }
+  },
+  {
+   "name": "bg512-AR0709SR",
+   "set": "bg512",
+   "source": "movingai",
+   "source_url": "https://movingai.com/benchmarks/bg512/bg512-map.zip",
+   "archive": "bg512-map.zip",
+   "member": "AR0709SR.map",
+   "path": "movingai/bg512/AR0709SR.map",
+   "sha256": "3f000aa5c25cd20db6c851a3c0ca9ae37374335b8d71a9c5de74ea2e6614d08c",
+   "height": 512,
+   "width": 512,
+   "free_fraction": 0.3201,
+   "scen": {
+    "archive": "bg512-scen.zip",
+    "member": "AR0709SR.map.scen",
+    "path": "movingai/bg512/AR0709SR.map.scen",
+    "sha256": "0743aff47c1d153ce4b172047ad80f4ec86f319b96927f2065e0ebdf278f3186"
+   }
+  },
+  {
+   "name": "street-Berlin_0_512",
+   "set": "street",
+   "source": "movingai",
+   "source_url": "https://movingai.com/benchmarks/street/street-map.zip",
+   "archive": "street-map.zip",
+   "member": "Berlin_0_512.map",
+   "path": "movingai/street/Berlin_0_512.map",
+   "sha256": "668bc902c07623fa2d0863247b7c2c1b44669868e05f10bcf84ba86ac8537b47",
+   "height": 512,
+   "width": 512,
+   "free_fraction": 0.7502,
+   "scen": {
+    "archive": "street-scen.zip",
+    "member": "Berlin_0_512.map.scen",
+    "path": "movingai/street/Berlin_0_512.map.scen",
+    "sha256": "711ca78d711c639c0f7de51d853e6d19f01380d00ea89322c60a1e151a8db214"
+   }
+  },
+  {
+   "name": "street-Boston_0_512",
+   "set": "street",
+   "source": "movingai",
+   "source_url": "https://movingai.com/benchmarks/street/street-map.zip",
+   "archive": "street-map.zip",
+   "member": "Boston_0_512.map",
+   "path": "movingai/street/Boston_0_512.map",
+   "sha256": "6c98531c38b1debb6c513029f8dbdceedf41904733fd6aa7bf0c8ab11c57d57a",
+   "height": 512,
+   "width": 512,
+   "free_fraction": 0.7504,
+   "scen": {
+    "archive": "street-scen.zip",
+    "member": "Boston_0_512.map.scen",
+    "path": "movingai/street/Boston_0_512.map.scen",
+    "sha256": "cac500f8a56609d8a512158156af4231d16eec15d410fbfb9dd81c4004eab36a"
+   }
+  },
+  {
+   "name": "street-Denver_0_512",
+   "set": "street",
+   "source": "movingai",
+   "source_url": "https://movingai.com/benchmarks/street/street-map.zip",
+   "archive": "street-map.zip",
+   "member": "Denver_0_512.map",
+   "path": "movingai/street/Denver_0_512.map",
+   "sha256": "dc72491a1198e5b08f98248dc57016d8fadd50046f0f78fee2bf8633980623f6",
+   "height": 512,
+   "width": 512,
+   "free_fraction": 0.7499,
+   "scen": {
+    "archive": "street-scen.zip",
+    "member": "Denver_0_512.map.scen",
+    "path": "movingai/street/Denver_0_512.map.scen",
+    "sha256": "a02a777d85fae3b101eba0ba877d8779b3066a08bd8f7796d3fd9865c3df9c04"
+   }
+  },
+  {
+   "name": "street-London_0_512",
+   "set": "street",
+   "source": "movingai",
+   "source_url": "https://movingai.com/benchmarks/street/street-map.zip",
+   "archive": "street-map.zip",
+   "member": "London_0_512.map",
+   "path": "movingai/street/London_0_512.map",
+   "sha256": "070bcb30bddfa89f60e3030b3ecc0339bae65c79025f3246e21a575c67f5a0d2",
+   "height": 512,
+   "width": 512,
+   "free_fraction": 0.7498,
+   "scen": {
+    "archive": "street-scen.zip",
+    "member": "London_0_512.map.scen",
+    "path": "movingai/street/London_0_512.map.scen",
+    "sha256": "530737d6c6f36d9424beb07dc8f3c8b17b633178550381dbd2aa01d92df987e1"
+   }
+  },
+  {
+   "name": "street-Milan_0_512",
+   "set": "street",
+   "source": "movingai",
+   "source_url": "https://movingai.com/benchmarks/street/street-map.zip",
+   "archive": "street-map.zip",
+   "member": "Milan_0_512.map",
+   "path": "movingai/street/Milan_0_512.map",
+   "sha256": "4bf9e71d76f0d882e15c10313aba6058a3e5ea0fe3a70a87d429fdd3a824e296",
+   "height": 512,
+   "width": 512,
+   "free_fraction": 0.7496,
+   "scen": {
+    "archive": "street-scen.zip",
+    "member": "Milan_0_512.map.scen",
+    "path": "movingai/street/Milan_0_512.map.scen",
+    "sha256": "2c39635143e70385e35dba56cbd699720c2fb4ecb9de2a11d918f93720453861"
+   }
+  },
+  {
+   "name": "street-Moscow_0_512",
+   "set": "street",
+   "source": "movingai",
+   "source_url": "https://movingai.com/benchmarks/street/street-map.zip",
+   "archive": "street-map.zip",
+   "member": "Moscow_0_512.map",
+   "path": "movingai/street/Moscow_0_512.map",
+   "sha256": "b7bf3e8ef5b4df0b500612953ba981a6953c13c73c0d4854d0f440a82f8c336f",
+   "height": 512,
+   "width": 512,
+   "free_fraction": 0.7498,
+   "scen": {
+    "archive": "street-scen.zip",
+    "member": "Moscow_0_512.map.scen",
+    "path": "movingai/street/Moscow_0_512.map.scen",
+    "sha256": "793c348b017e8d40c0fb94a9f2317f54fe45fd5ca8bdb93cc703a31bca54c52a"
+   }
+  },
+  {
+   "name": "street-NewYork_0_512",
+   "set": "street",
+   "source": "movingai",
+   "source_url": "https://movingai.com/benchmarks/street/street-map.zip",
+   "archive": "street-map.zip",
+   "member": "NewYork_0_512.map",
+   "path": "movingai/street/NewYork_0_512.map",
+   "sha256": "5b1b758c81225025460c6f1cdb6e0e7a4e1c29dd6005be9bbe22f7d3cb89af21",
+   "height": 512,
+   "width": 512,
+   "free_fraction": 0.7501,
+   "scen": {
+    "archive": "street-scen.zip",
+    "member": "NewYork_0_512.map.scen",
+    "path": "movingai/street/NewYork_0_512.map.scen",
+    "sha256": "1ecf5450193856f99b5c3df569a79604934f04b818bdf3eb27ae933ebc839882"
+   }
+  },
+  {
+   "name": "street-Paris_0_512",
+   "set": "street",
+   "source": "movingai",
+   "source_url": "https://movingai.com/benchmarks/street/street-map.zip",
+   "archive": "street-map.zip",
+   "member": "Paris_0_512.map",
+   "path": "movingai/street/Paris_0_512.map",
+   "sha256": "66b42f3f2930376e9c9065d503b80436c7b6b196f59ed71c7489d9bd4d2550cf",
+   "height": 512,
+   "width": 512,
+   "free_fraction": 0.7498,
+   "scen": {
+    "archive": "street-scen.zip",
+    "member": "Paris_0_512.map.scen",
+    "path": "movingai/street/Paris_0_512.map.scen",
+    "sha256": "4d9fdfb6bdc624d208e27079c33719a5188d51e975b237f9e486de22fb2687ed"
+   }
+  },
+  {
+   "name": "street-Shanghai_0_512",
+   "set": "street",
+   "source": "movingai",
+   "source_url": "https://movingai.com/benchmarks/street/street-map.zip",
+   "archive": "street-map.zip",
+   "member": "Shanghai_0_512.map",
+   "path": "movingai/street/Shanghai_0_512.map",
+   "sha256": "4d3a421c832139e419e506c9d97a7742f6ed58538e435f45e0ed4038471860d5",
+   "height": 512,
+   "width": 512,
+   "free_fraction": 0.7498,
+   "scen": {
+    "archive": "street-scen.zip",
+    "member": "Shanghai_0_512.map.scen",
+    "path": "movingai/street/Shanghai_0_512.map.scen",
+    "sha256": "68619061365af20cb44fe93f488324dd99ebedf0aa3cd2c0f0482f7660f09d53"
+   }
+  },
+  {
+   "name": "street-Sydney_0_512",
+   "set": "street",
+   "source": "movingai",
+   "source_url": "https://movingai.com/benchmarks/street/street-map.zip",
+   "archive": "street-map.zip",
+   "member": "Sydney_0_512.map",
+   "path": "movingai/street/Sydney_0_512.map",
+   "sha256": "20b0e41ce9f43a10f3e9bb851b9023ce78118760a68954be2455fd9524a57a37",
+   "height": 512,
+   "width": 512,
+   "free_fraction": 0.7503,
+   "scen": {
+    "archive": "street-scen.zip",
+    "member": "Sydney_0_512.map.scen",
+    "path": "movingai/street/Sydney_0_512.map.scen",
+    "sha256": "1916c82e4ea6a36021e7cd166661f6b96468f87114d523bcd7a30a478f65a741"
+   }
+  },
+  {
+   "name": "maze-maze512-2-0",
+   "set": "maze",
+   "source": "movingai",
+   "source_url": "https://movingai.com/benchmarks/maze/maze-map.zip",
+   "archive": "maze-map.zip",
+   "member": "maze512-2-0.map",
+   "path": "movingai/maze/maze512-2-0.map",
+   "sha256": "0448e934dd39d0808fe53d0b8da30f6e32ed43f739034fd279f5032ff2148400",
+   "height": 512,
+   "width": 512,
+   "free_fraction": 0.6658,
+   "scen": {
+    "archive": "maze-scen.zip",
+    "member": "maze512-2-0.map.scen",
+    "path": "movingai/maze/maze512-2-0.map.scen",
+    "sha256": "0267d77ad034c8d7c9ceecc1531c3d0382e9ad0e294409439e097da08a70f16b"
+   }
+  },
+  {
+   "name": "maze-maze512-2-1",
+   "set": "maze",
+   "source": "movingai",
+   "source_url": "https://movingai.com/benchmarks/maze/maze-map.zip",
+   "archive": "maze-map.zip",
+   "member": "maze512-2-1.map",
+   "path": "movingai/maze/maze512-2-1.map",
+   "sha256": "4da4171f731b545e03bd717220a069a0fcf1b6b3ca2c536b5c804cc1026a1061",
+   "height": 512,
+   "width": 512,
+   "free_fraction": 0.6657,
+   "scen": {
+    "archive": "maze-scen.zip",
+    "member": "maze512-2-1.map.scen",
+    "path": "movingai/maze/maze512-2-1.map.scen",
+    "sha256": "a54be7f9f46bc220b09b851d3381e4feef135f42d8b5745d658fbb5dd2725af0"
+   }
+  },
+  {
+   "name": "maze-maze512-4-0",
+   "set": "maze",
+   "source": "movingai",
+   "source_url": "https://movingai.com/benchmarks/maze/maze-map.zip",
+   "archive": "maze-map.zip",
+   "member": "maze512-4-0.map",
+   "path": "movingai/maze/maze512-4-0.map",
+   "sha256": "81a79c24f861caca0baed82d9569ffe1adf1a05bd326f4239dc3d6dc72d807b7",
+   "height": 512,
+   "width": 512,
+   "free_fraction": 0.7983,
+   "scen": {
+    "archive": "maze-scen.zip",
+    "member": "maze512-4-0.map.scen",
+    "path": "movingai/maze/maze512-4-0.map.scen",
+    "sha256": "904dca83593f1fc8f6823c31febdbef00238112a9aed9f8a9378fd5e4638775c"
+   }
+  },
+  {
+   "name": "maze-maze512-4-1",
+   "set": "maze",
+   "source": "movingai",
+   "source_url": "https://movingai.com/benchmarks/maze/maze-map.zip",
+   "archive": "maze-map.zip",
+   "member": "maze512-4-1.map",
+   "path": "movingai/maze/maze512-4-1.map",
+   "sha256": "fd9b24536598977c27d2c8c4b391fcc586bb851e2bd568443b0fda92954eba5c",
+   "height": 512,
+   "width": 512,
+   "free_fraction": 0.7983,
+   "scen": {
+    "archive": "maze-scen.zip",
+    "member": "maze512-4-1.map.scen",
+    "path": "movingai/maze/maze512-4-1.map.scen",
+    "sha256": "e819f347b975b9d7a44e857a4d682f3b0cd920a7e4145b165c3c52bbefa736dd"
+   }
+  },
+  {
+   "name": "maze-maze512-8-0",
+   "set": "maze",
+   "source": "movingai",
+   "source_url": "https://movingai.com/benchmarks/maze/maze-map.zip",
+   "archive": "maze-map.zip",
+   "member": "maze512-8-0.map",
+   "path": "movingai/maze/maze512-8-0.map",
+   "sha256": "0acd62f4e854db729240f49896b6bdc6f5127ec32d2d3f14c43f56ad99a39ecc",
+   "height": 512,
+   "width": 512,
+   "free_fraction": 0.8886,
+   "scen": {
+    "archive": "maze-scen.zip",
+    "member": "maze512-8-0.map.scen",
+    "path": "movingai/maze/maze512-8-0.map.scen",
+    "sha256": "ceaaa8af265e6a2635026220c8f205d08e369d40d64ed921604e02dd95101863"
+   }
+  },
+  {
+   "name": "maze-maze512-8-1",
+   "set": "maze",
+   "source": "movingai",
+   "source_url": "https://movingai.com/benchmarks/maze/maze-map.zip",
+   "archive": "maze-map.zip",
+   "member": "maze512-8-1.map",
+   "path": "movingai/maze/maze512-8-1.map",
+   "sha256": "60c7fab5e21cfa295af46d0f6af0385f35174f970628a3f05c593435c26a92b1",
+   "height": 512,
+   "width": 512,
+   "free_fraction": 0.8885,
+   "scen": {
+    "archive": "maze-scen.zip",
+    "member": "maze512-8-1.map.scen",
+    "path": "movingai/maze/maze512-8-1.map.scen",
+    "sha256": "83cf3da01c63af349482a9d85485929f679b5f1ac051d4a14e6718db29b5aee9"
+   }
+  },
+  {
+   "name": "maze-maze512-16-0",
+   "set": "maze",
+   "source": "movingai",
+   "source_url": "https://movingai.com/benchmarks/maze/maze-map.zip",
+   "archive": "maze-map.zip",
+   "member": "maze512-16-0.map",
+   "path": "movingai/maze/maze512-16-0.map",
+   "sha256": "7fd1b43f296738c093cbd5f589b1414fbb8cc35f7d7462fd188c21fa3f99aac3",
+   "height": 512,
+   "width": 512,
+   "free_fraction": 0.9385,
+   "scen": {
+    "archive": "maze-scen.zip",
+    "member": "maze512-16-0.map.scen",
+    "path": "movingai/maze/maze512-16-0.map.scen",
+    "sha256": "4a0d78bdcf46ddae03df806a28130ab867261844a5ca892b657aeb9f5b07f0f7"
+   }
+  },
+  {
+   "name": "maze-maze512-16-1",
+   "set": "maze",
+   "source": "movingai",
+   "source_url": "https://movingai.com/benchmarks/maze/maze-map.zip",
+   "archive": "maze-map.zip",
+   "member": "maze512-16-1.map",
+   "path": "movingai/maze/maze512-16-1.map",
+   "sha256": "ab5bd53a565a29dae4aa7b425b39608114c91c930beef66c0eadee5097e7a750",
+   "height": 512,
+   "width": 512,
+   "free_fraction": 0.9386,
+   "scen": {
+    "archive": "maze-scen.zip",
+    "member": "maze512-16-1.map.scen",
+    "path": "movingai/maze/maze512-16-1.map.scen",
+    "sha256": "904d64c31abaf477fc7f9fbea9ddf63c3e15a40ff417e1361b0bcc0939d7f3a1"
+   }
+  },
+  {
+   "name": "maze-maze512-32-0",
+   "set": "maze",
+   "source": "movingai",
+   "source_url": "https://movingai.com/benchmarks/maze/maze-map.zip",
+   "archive": "maze-map.zip",
+   "member": "maze512-32-0.map",
+   "path": "movingai/maze/maze512-32-0.map",
+   "sha256": "b25a0b21f0366e973b603ab700e24de99570c0f8a2c61a78c44a0807057b37fc",
+   "height": 512,
+   "width": 512,
+   "free_fraction": 0.9683,
+   "scen": {
+    "archive": "maze-scen.zip",
+    "member": "maze512-32-0.map.scen",
+    "path": "movingai/maze/maze512-32-0.map.scen",
+    "sha256": "c6624a27d975183d19813b91a017afe88e4cf5eda0fa2d39b9982e5b315cfc7f"
+   }
+  },
+  {
+   "name": "maze-maze512-32-1",
+   "set": "maze",
+   "source": "movingai",
+   "source_url": "https://movingai.com/benchmarks/maze/maze-map.zip",
+   "archive": "maze-map.zip",
+   "member": "maze512-32-1.map",
+   "path": "movingai/maze/maze512-32-1.map",
+   "sha256": "5e3740479a25c0c44a33580be2a159a91b8837a30ac51ff80d95cda9992986e3",
+   "height": 512,
+   "width": 512,
+   "free_fraction": 0.9682,
+   "scen": {
+    "archive": "maze-scen.zip",
+    "member": "maze512-32-1.map.scen",
+    "path": "movingai/maze/maze512-32-1.map.scen",
+    "sha256": "3b23cfadf8a74effee48686e51c2f47a1522b7f71f1e47b7a1ab94131059c582"
+   }
+  },
+  {
+   "name": "room-8room_000",
+   "set": "room",
+   "source": "movingai",
+   "source_url": "https://movingai.com/benchmarks/room/room-map.zip",
+   "archive": "room-map.zip",
+   "member": "8room_000.map",
+   "path": "movingai/room/8room_000.map",
+   "sha256": "a4bb11d357f47295a07f2f57cd40fca4853fbe87dd476b9a53e3430739e07b99",
+   "height": 512,
+   "width": 512,
+   "free_fraction": 0.7883,
+   "scen": {
+    "archive": "room-scen.zip",
+    "member": "8room_000.map.scen",
+    "path": "movingai/room/8room_000.map.scen",
+    "sha256": "b77e458a339a9edc7077181465fd57a821814b33b2308f2d0ad0246374c4c69f"
+   }
+  },
+  {
+   "name": "room-8room_001",
+   "set": "room",
+   "source": "movingai",
+   "source_url": "https://movingai.com/benchmarks/room/room-map.zip",
+   "archive": "room-map.zip",
+   "member": "8room_001.map",
+   "path": "movingai/room/8room_001.map",
+   "sha256": "c8d0d1199d54463f8e5b43675267c74b033a1c97838bea30edf1a0e3f613bfb3",
+   "height": 512,
+   "width": 512,
+   "free_fraction": 0.7886,
+   "scen": {
+    "archive": "room-scen.zip",
+    "member": "8room_001.map.scen",
+    "path": "movingai/room/8room_001.map.scen",
+    "sha256": "60f40d9844ec298081fc65afcddf0264de0c289253a0549a3bf2dc9decb35252"
+   }
+  },
+  {
+   "name": "room-16room_000",
+   "set": "room",
+   "source": "movingai",
+   "source_url": "https://movingai.com/benchmarks/room/room-map.zip",
+   "archive": "room-map.zip",
+   "member": "16room_000.map",
+   "path": "movingai/room/16room_000.map",
+   "sha256": "efe1156993b2b96df1b23ce4f0f89d4c66b77051d9484efefa93899b141458af",
+   "height": 512,
+   "width": 512,
+   "free_fraction": 0.8845,
+   "scen": {
+    "archive": "room-scen.zip",
+    "member": "16room_000.map.scen",
+    "path": "movingai/room/16room_000.map.scen",
+    "sha256": "b1a17994cacca6a5c15bd08f439c1027d942e227d3dd59cf1b05d4456a3c367c"
+   }
+  },
+  {
+   "name": "room-16room_001",
+   "set": "room",
+   "source": "movingai",
+   "source_url": "https://movingai.com/benchmarks/room/room-map.zip",
+   "archive": "room-map.zip",
+   "member": "16room_001.map",
+   "path": "movingai/room/16room_001.map",
+   "sha256": "4e844b0cb1689bd412f60e8948ee07662fd638ed17348f5ddbc97b406db223e0",
+   "height": 512,
+   "width": 512,
+   "free_fraction": 0.8825,
+   "scen": {
+    "archive": "room-scen.zip",
+    "member": "16room_001.map.scen",
+    "path": "movingai/room/16room_001.map.scen",
+    "sha256": "c1766c85d45e5b88ac263659fb6dff23c9b2f385a5eef7ee8362ef652f8361a5"
+   }
+  },
+  {
+   "name": "room-32room_000",
+   "set": "room",
+   "source": "movingai",
+   "source_url": "https://movingai.com/benchmarks/room/room-map.zip",
+   "archive": "room-map.zip",
+   "member": "32room_000.map",
+   "path": "movingai/room/32room_000.map",
+   "sha256": "57fe06dadf5caa09c45e823521fc548398a1ebcc1c7dd89ffcee049146b88db9",
+   "height": 512,
+   "width": 512,
+   "free_fraction": 0.9181,
+   "scen": {
+    "archive": "room-scen.zip",
+    "member": "32room_000.map.scen",
+    "path": "movingai/room/32room_000.map.scen",
+    "sha256": "a0a7b77e0a3d4ae16c4de2ad46978da02fb3313e0cacbb0a6166b6a2f35e57e1"
+   }
+  },
+  {
+   "name": "room-32room_001",
+   "set": "room",
+   "source": "movingai",
+   "source_url": "https://movingai.com/benchmarks/room/room-map.zip",
+   "archive": "room-map.zip",
+   "member": "32room_001.map",
+   "path": "movingai/room/32room_001.map",
+   "sha256": "ed637264b493b33254305531a91b540291160bd6254d9a34975cac6e525ec173",
+   "height": 512,
+   "width": 512,
+   "free_fraction": 0.9364,
+   "scen": {
+    "archive": "room-scen.zip",
+    "member": "32room_001.map.scen",
+    "path": "movingai/room/32room_001.map.scen",
+    "sha256": "56512fe607dc266f6bcafaf16dba968f8faf85d159765b231294dc417fdab3e4"
+   }
+  },
+  {
+   "name": "room-32room_002",
+   "set": "room",
+   "source": "movingai",
+   "source_url": "https://movingai.com/benchmarks/room/room-map.zip",
+   "archive": "room-map.zip",
+   "member": "32room_002.map",
+   "path": "movingai/room/32room_002.map",
+   "sha256": "24153efb6516a07e8149b7e3b1a74ad22fb972fd5ce591de84b672368a48b87a",
+   "height": 512,
+   "width": 512,
+   "free_fraction": 0.94,
+   "scen": {
+    "archive": "room-scen.zip",
+    "member": "32room_002.map.scen",
+    "path": "movingai/room/32room_002.map.scen",
+    "sha256": "cc96f643bde3b905e85ac703351df58640245d480570c570aa3b2c394abeeea1"
+   }
+  },
+  {
+   "name": "room-64room_000",
+   "set": "room",
+   "source": "movingai",
+   "source_url": "https://movingai.com/benchmarks/room/room-map.zip",
+   "archive": "room-map.zip",
+   "member": "64room_000.map",
+   "path": "movingai/room/64room_000.map",
+   "sha256": "9056bd8ecaf89863a95e27de50a5081e4f119d8870c21360bc568f83baf4b783",
+   "height": 512,
+   "width": 512,
+   "free_fraction": 0.9391,
+   "scen": {
+    "archive": "room-scen.zip",
+    "member": "64room_000.map.scen",
+    "path": "movingai/room/64room_000.map.scen",
+    "sha256": "8bef9ab81858335c9009981b89f8f60f0c9adcd191c35d8e29be32fdfe534a22"
+   }
+  },
+  {
+   "name": "room-64room_001",
+   "set": "room",
+   "source": "movingai",
+   "source_url": "https://movingai.com/benchmarks/room/room-map.zip",
+   "archive": "room-map.zip",
+   "member": "64room_001.map",
+   "path": "movingai/room/64room_001.map",
+   "sha256": "73896a57293327f2e3216a2af54439933be3904007ae128a999f5bc9d69eddf9",
+   "height": 512,
+   "width": 512,
+   "free_fraction": 0.9542,
+   "scen": {
+    "archive": "room-scen.zip",
+    "member": "64room_001.map.scen",
+    "path": "movingai/room/64room_001.map.scen",
+    "sha256": "64cb56e7aaad1a4f3dc4a1ba59fbe39ec87b171e81eb52af7250d2b2c6cef381"
+   }
+  },
+  {
+   "name": "room-64room_002",
+   "set": "room",
+   "source": "movingai",
+   "source_url": "https://movingai.com/benchmarks/room/room-map.zip",
+   "archive": "room-map.zip",
+   "member": "64room_002.map",
+   "path": "movingai/room/64room_002.map",
+   "sha256": "ce60bffc2201da69a9e922209f0d7febd88661ddda60ba20df7d8d3daa616a4f",
+   "height": 512,
+   "width": 512,
+   "free_fraction": 0.9694,
+   "scen": {
+    "archive": "room-scen.zip",
+    "member": "64room_002.map.scen",
+    "path": "movingai/room/64room_002.map.scen",
+    "sha256": "0c4530c68e77ec2f964aa1d9d9d007a0a9103488b1a6798aebc8a01daa0bd42c"
+   }
+  },
+  {
+   "name": "houseexpo-26c7866a",
+   "set": "houseexpo",
+   "source": "houseexpo",
+   "source_url": "https://raw.githubusercontent.com/TeaganLi/HouseExpo/45e2b2505f6ea1fe49c0203f14efb7ce20b94e7c/HouseExpo/json.tar.gz",
+   "archive": "houseexpo-json.tar.gz",
+   "member": "json/26c7866ac4b641cc6e768b170c8203c8.json",
+   "path": "houseexpo/26c7866ac4b641cc6e768b170c8203c8.json",
+   "sha256": "717a794e006ebf59a11c07d9f65f40ff9808b892ac6b343aca328062234ae3a6",
+   "height": 180,
+   "width": 140,
+   "free_fraction": 0.8522,
+   "room_num": 5,
+   "scen": null
+  },
+  {
+   "name": "houseexpo-2a2f9611",
+   "set": "houseexpo",
+   "source": "houseexpo",
+   "source_url": "https://raw.githubusercontent.com/TeaganLi/HouseExpo/45e2b2505f6ea1fe49c0203f14efb7ce20b94e7c/HouseExpo/json.tar.gz",
+   "archive": "houseexpo-json.tar.gz",
+   "member": "json/2a2f96114b5cce6f54ccd0c2dda5f599.json",
+   "path": "houseexpo/2a2f96114b5cce6f54ccd0c2dda5f599.json",
+   "sha256": "8d0569cb6bb01b42e533dae081c6f69b2250e651d0267b6c7a64337896845bc8",
+   "height": 219,
+   "width": 341,
+   "free_fraction": 0.5402,
+   "room_num": 8,
+   "scen": null
+  },
+  {
+   "name": "houseexpo-331fbd47",
+   "set": "houseexpo",
+   "source": "houseexpo",
+   "source_url": "https://raw.githubusercontent.com/TeaganLi/HouseExpo/45e2b2505f6ea1fe49c0203f14efb7ce20b94e7c/HouseExpo/json.tar.gz",
+   "archive": "houseexpo-json.tar.gz",
+   "member": "json/331fbd4780c1c167b0677a7c9ec36729.json",
+   "path": "houseexpo/331fbd4780c1c167b0677a7c9ec36729.json",
+   "sha256": "217e17721f3924c731c28dac1d1c3a7cc75d82b34bb5de690548085c77f4f124",
+   "height": 169,
+   "width": 206,
+   "free_fraction": 0.7425,
+   "room_num": 5,
+   "scen": null
+  },
+  {
+   "name": "houseexpo-4a78f887",
+   "set": "houseexpo",
+   "source": "houseexpo",
+   "source_url": "https://raw.githubusercontent.com/TeaganLi/HouseExpo/45e2b2505f6ea1fe49c0203f14efb7ce20b94e7c/HouseExpo/json.tar.gz",
+   "archive": "houseexpo-json.tar.gz",
+   "member": "json/4a78f8872c50bbcf80698d74955f989a.json",
+   "path": "houseexpo/4a78f8872c50bbcf80698d74955f989a.json",
+   "sha256": "2b06a50b90b8e935b3384bbe8a1ecacf7a65963fec661aa971e01da39b476938",
+   "height": 363,
+   "width": 292,
+   "free_fraction": 0.8581,
+   "room_num": 8,
+   "scen": null
+  },
+  {
+   "name": "houseexpo-4bca72d9",
+   "set": "houseexpo",
+   "source": "houseexpo",
+   "source_url": "https://raw.githubusercontent.com/TeaganLi/HouseExpo/45e2b2505f6ea1fe49c0203f14efb7ce20b94e7c/HouseExpo/json.tar.gz",
+   "archive": "houseexpo-json.tar.gz",
+   "member": "json/4bca72d9400f98e56ff10d9cb5485920.json",
+   "path": "houseexpo/4bca72d9400f98e56ff10d9cb5485920.json",
+   "sha256": "e504e072f578f5f7950da582fd82ff22a56cbd5e150e0d5fb472fa9977b2754f",
+   "height": 144,
+   "width": 165,
+   "free_fraction": 0.9017,
+   "room_num": 4,
+   "scen": null
+  },
+  {
+   "name": "houseexpo-53a52ccc",
+   "set": "houseexpo",
+   "source": "houseexpo",
+   "source_url": "https://raw.githubusercontent.com/TeaganLi/HouseExpo/45e2b2505f6ea1fe49c0203f14efb7ce20b94e7c/HouseExpo/json.tar.gz",
+   "archive": "houseexpo-json.tar.gz",
+   "member": "json/53a52cccece965a68477e1f087279390.json",
+   "path": "houseexpo/53a52cccece965a68477e1f087279390.json",
+   "sha256": "6b831903a52ca7f8b0d15e3e5129d438ff8b228ee5f023f6e73faebddc83f69b",
+   "height": 249,
+   "width": 394,
+   "free_fraction": 0.5433,
+   "room_num": 4,
+   "scen": null
+  },
+  {
+   "name": "houseexpo-53e60bfe",
+   "set": "houseexpo",
+   "source": "houseexpo",
+   "source_url": "https://raw.githubusercontent.com/TeaganLi/HouseExpo/45e2b2505f6ea1fe49c0203f14efb7ce20b94e7c/HouseExpo/json.tar.gz",
+   "archive": "houseexpo-json.tar.gz",
+   "member": "json/53e60bfec9e8ba78df2d0d0358b2160c.json",
+   "path": "houseexpo/53e60bfec9e8ba78df2d0d0358b2160c.json",
+   "sha256": "3bca6a701c44bc8368ce5443447aaac5e9ad6a1d9301be77c0e994053de6b51e",
+   "height": 211,
+   "width": 206,
+   "free_fraction": 0.8453,
+   "room_num": 5,
+   "scen": null
+  },
+  {
+   "name": "houseexpo-65f71303",
+   "set": "houseexpo",
+   "source": "houseexpo",
+   "source_url": "https://raw.githubusercontent.com/TeaganLi/HouseExpo/45e2b2505f6ea1fe49c0203f14efb7ce20b94e7c/HouseExpo/json.tar.gz",
+   "archive": "houseexpo-json.tar.gz",
+   "member": "json/65f71303ed8ca83508f6c8a9d72ccc9c.json",
+   "path": "houseexpo/65f71303ed8ca83508f6c8a9d72ccc9c.json",
+   "sha256": "07da2eea527d3fd2e5cf8b737094396484e06092a3834215473d49659c8503f1",
+   "height": 241,
+   "width": 286,
+   "free_fraction": 0.9082,
+   "room_num": 8,
+   "scen": null
+  },
+  {
+   "name": "houseexpo-70ab9e4f",
+   "set": "houseexpo",
+   "source": "houseexpo",
+   "source_url": "https://raw.githubusercontent.com/TeaganLi/HouseExpo/45e2b2505f6ea1fe49c0203f14efb7ce20b94e7c/HouseExpo/json.tar.gz",
+   "archive": "houseexpo-json.tar.gz",
+   "member": "json/70ab9e4f0f63e35fae1524c4604d8092.json",
+   "path": "houseexpo/70ab9e4f0f63e35fae1524c4604d8092.json",
+   "sha256": "4387b545a4e42bae41b875d6431b2dd43869b41ac936cf89a10858de99ab8158",
+   "height": 306,
+   "width": 358,
+   "free_fraction": 0.7606,
+   "room_num": 9,
+   "scen": null
+  },
+  {
+   "name": "houseexpo-7b5e0e3c",
+   "set": "houseexpo",
+   "source": "houseexpo",
+   "source_url": "https://raw.githubusercontent.com/TeaganLi/HouseExpo/45e2b2505f6ea1fe49c0203f14efb7ce20b94e7c/HouseExpo/json.tar.gz",
+   "archive": "houseexpo-json.tar.gz",
+   "member": "json/7b5e0e3c9cdd71b0ed80ff19295670c8.json",
+   "path": "houseexpo/7b5e0e3c9cdd71b0ed80ff19295670c8.json",
+   "sha256": "d7954c794f60f9845805c6f586288e0c91ac390ccbf5556188995ac20046ecd2",
+   "height": 176,
+   "width": 169,
+   "free_fraction": 0.7552,
+   "room_num": 6,
+   "scen": null
+  },
+  {
+   "name": "houseexpo-8d2539b0",
+   "set": "houseexpo",
+   "source": "houseexpo",
+   "source_url": "https://raw.githubusercontent.com/TeaganLi/HouseExpo/45e2b2505f6ea1fe49c0203f14efb7ce20b94e7c/HouseExpo/json.tar.gz",
+   "archive": "houseexpo-json.tar.gz",
+   "member": "json/8d2539b0e328c8679b1f79a4b07b0179.json",
+   "path": "houseexpo/8d2539b0e328c8679b1f79a4b07b0179.json",
+   "sha256": "069934e4fcf55a588917246ad6f5ead90e076629664c2e3c33039addaafbf3c1",
+   "height": 208,
+   "width": 394,
+   "free_fraction": 0.7178,
+   "room_num": 6,
+   "scen": null
+  },
+  {
+   "name": "houseexpo-8efd1ba8",
+   "set": "houseexpo",
+   "source": "houseexpo",
+   "source_url": "https://raw.githubusercontent.com/TeaganLi/HouseExpo/45e2b2505f6ea1fe49c0203f14efb7ce20b94e7c/HouseExpo/json.tar.gz",
+   "archive": "houseexpo-json.tar.gz",
+   "member": "json/8efd1ba857ca51c68b4f0a89b1274f3b.json",
+   "path": "houseexpo/8efd1ba857ca51c68b4f0a89b1274f3b.json",
+   "sha256": "ddc90baddcc5f6c50d2f907be588eb66cb8f92cf2d7f3d70a39ed91611177d02",
+   "height": 144,
+   "width": 295,
+   "free_fraction": 0.8626,
+   "room_num": 8,
+   "scen": null
+  },
+  {
+   "name": "houseexpo-a26ab0c3",
+   "set": "houseexpo",
+   "source": "houseexpo",
+   "source_url": "https://raw.githubusercontent.com/TeaganLi/HouseExpo/45e2b2505f6ea1fe49c0203f14efb7ce20b94e7c/HouseExpo/json.tar.gz",
+   "archive": "houseexpo-json.tar.gz",
+   "member": "json/a26ab0c3035e697396825edc9e61a064.json",
+   "path": "houseexpo/a26ab0c3035e697396825edc9e61a064.json",
+   "sha256": "d7da05d06a1ba1f091f1e75e6b91d6b66fd3616bbe7041321fb6922d43f798ab",
+   "height": 269,
+   "width": 325,
+   "free_fraction": 0.7759,
+   "room_num": 6,
+   "scen": null
+  },
+  {
+   "name": "houseexpo-a4ad160f",
+   "set": "houseexpo",
+   "source": "houseexpo",
+   "source_url": "https://raw.githubusercontent.com/TeaganLi/HouseExpo/45e2b2505f6ea1fe49c0203f14efb7ce20b94e7c/HouseExpo/json.tar.gz",
+   "archive": "houseexpo-json.tar.gz",
+   "member": "json/a4ad160f0ed4ab4f038bac3640130cbe.json",
+   "path": "houseexpo/a4ad160f0ed4ab4f038bac3640130cbe.json",
+   "sha256": "d6b68c0b3509b5f0e1b2e46a47fc238ca454140960c2a9cb89a431b05ea4ab58",
+   "height": 177,
+   "width": 298,
+   "free_fraction": 0.9345,
+   "room_num": 7,
+   "scen": null
+  },
+  {
+   "name": "houseexpo-b6204476",
+   "set": "houseexpo",
+   "source": "houseexpo",
+   "source_url": "https://raw.githubusercontent.com/TeaganLi/HouseExpo/45e2b2505f6ea1fe49c0203f14efb7ce20b94e7c/HouseExpo/json.tar.gz",
+   "archive": "houseexpo-json.tar.gz",
+   "member": "json/b6204476096f29f8b0a5fb4e755bd874.json",
+   "path": "houseexpo/b6204476096f29f8b0a5fb4e755bd874.json",
+   "sha256": "7f28e2b75fd6909fef7571e85dfc464b491127854d3b0c69042273191efa0c96",
+   "height": 348,
+   "width": 508,
+   "free_fraction": 0.3646,
+   "room_num": 5,
+   "scen": null
+  },
+  {
+   "name": "houseexpo-c839b47e",
+   "set": "houseexpo",
+   "source": "houseexpo",
+   "source_url": "https://raw.githubusercontent.com/TeaganLi/HouseExpo/45e2b2505f6ea1fe49c0203f14efb7ce20b94e7c/HouseExpo/json.tar.gz",
+   "archive": "houseexpo-json.tar.gz",
+   "member": "json/c839b47e5c54744ac0831c1ff3ed4d00.json",
+   "path": "houseexpo/c839b47e5c54744ac0831c1ff3ed4d00.json",
+   "sha256": "6881bd3d5556f7c23e0e00ec32fab7f2199330181eafd5fed17987586a7a9457",
+   "height": 106,
+   "width": 175,
+   "free_fraction": 0.7756,
+   "room_num": 4,
+   "scen": null
+  },
+  {
+   "name": "houseexpo-cb5835d3",
+   "set": "houseexpo",
+   "source": "houseexpo",
+   "source_url": "https://raw.githubusercontent.com/TeaganLi/HouseExpo/45e2b2505f6ea1fe49c0203f14efb7ce20b94e7c/HouseExpo/json.tar.gz",
+   "archive": "houseexpo-json.tar.gz",
+   "member": "json/cb5835d381e1785f364e73150e0d6334.json",
+   "path": "houseexpo/cb5835d381e1785f364e73150e0d6334.json",
+   "sha256": "14e2ebdbdf6b60c3fbd36567320ba9e01549a3ca0d487a48d03b82b72421ce00",
+   "height": 262,
+   "width": 363,
+   "free_fraction": 0.8477,
+   "room_num": 4,
+   "scen": null
+  },
+  {
+   "name": "houseexpo-d1500e8b",
+   "set": "houseexpo",
+   "source": "houseexpo",
+   "source_url": "https://raw.githubusercontent.com/TeaganLi/HouseExpo/45e2b2505f6ea1fe49c0203f14efb7ce20b94e7c/HouseExpo/json.tar.gz",
+   "archive": "houseexpo-json.tar.gz",
+   "member": "json/d1500e8bdc79f4aa4ad4f0e37d170ba5.json",
+   "path": "houseexpo/d1500e8bdc79f4aa4ad4f0e37d170ba5.json",
+   "sha256": "b99cf9ed0b5ea0806907cb2ad3e5ddd171fdca682a7517e0e129666842d57f9c",
+   "height": 326,
+   "width": 236,
+   "free_fraction": 0.8699,
+   "room_num": 7,
+   "scen": null
+  },
+  {
+   "name": "houseexpo-e8865a4d",
+   "set": "houseexpo",
+   "source": "houseexpo",
+   "source_url": "https://raw.githubusercontent.com/TeaganLi/HouseExpo/45e2b2505f6ea1fe49c0203f14efb7ce20b94e7c/HouseExpo/json.tar.gz",
+   "archive": "houseexpo-json.tar.gz",
+   "member": "json/e8865a4d5779da3b76ea54f3b503a30f.json",
+   "path": "houseexpo/e8865a4d5779da3b76ea54f3b503a30f.json",
+   "sha256": "21bb0265efc5b9f30ede5d9ccc0bbca5939fcf123dfb93a8fdea4df4b7005a9b",
+   "height": 284,
+   "width": 339,
+   "free_fraction": 0.9475,
+   "room_num": 11,
+   "scen": null
+  },
+  {
+   "name": "houseexpo-e92780fd",
+   "set": "houseexpo",
+   "source": "houseexpo",
+   "source_url": "https://raw.githubusercontent.com/TeaganLi/HouseExpo/45e2b2505f6ea1fe49c0203f14efb7ce20b94e7c/HouseExpo/json.tar.gz",
+   "archive": "houseexpo-json.tar.gz",
+   "member": "json/e92780fdbcd7e27207de24ddf70d5b15.json",
+   "path": "houseexpo/e92780fdbcd7e27207de24ddf70d5b15.json",
+   "sha256": "8db90e18a8c55f813a3e919d0e6e705527aa5f7942df479d9d5e0fdb9e8196a5",
+   "height": 184,
+   "width": 255,
+   "free_fraction": 0.8948,
+   "room_num": 9,
+   "scen": null
+  }
+ ]
+}

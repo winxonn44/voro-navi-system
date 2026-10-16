@@ -6,6 +6,7 @@ import math
 import numpy as np
 import pytest
 from scipy.sparse import coo_matrix
+from scipy.ndimage import distance_transform_edt
 from scipy.sparse.csgraph import dijkstra
 
 from voronav.maps import random_obstacles
@@ -78,3 +79,54 @@ def test_unreachable_and_bad_start():
         search(passable, (0, 2), goal=(0, 4))
     with pytest.raises(ValueError):
         search(passable, (0, 0))
+
+
+def _weighted_graph(passable, mult):
+    """Same graph, each edge scaled by the multiplier of the pixel it enters."""
+    g = _grid_graph(passable).tocoo()
+    scale = mult.reshape(-1)[g.col]
+    return coo_matrix((g.data * scale, (g.row, g.col)), shape=g.shape).tocsr()
+
+
+@pytest.mark.parametrize("seed", [0, 1, 2])
+def test_weighted_astar_cost_matches_scipy_dijkstra(seed):
+    occ = random_obstacles(40, 40, 6, seed=seed)
+    passable = ~occ
+    clr = distance_transform_edt(passable)
+    mult = np.where(passable, 1.0 + 4.0 / np.maximum(clr, 1e-9), 1.0)
+    rng = np.random.default_rng(seed)
+    free = np.argwhere(passable)
+    dist = dijkstra(_weighted_graph(passable, mult), indices=None, directed=True)
+    w = passable.shape[1]
+    for _ in range(10):
+        a, b = (tuple(free[i]) for i in rng.integers(len(free), size=2))
+        expected = dist[a[0] * w + a[1], b[0] * w + b[1]]
+        res = search(passable, a, goal=b, cost_mult=mult)
+        if math.isinf(expected):
+            assert res.path is None
+            continue
+        assert res.cost == pytest.approx(expected)
+        steps = np.diff(res.path, axis=0)
+        cost = (np.hypot(steps[:, 0], steps[:, 1]) * mult[res.path[1:, 0], res.path[1:, 1]]).sum()
+        assert cost == pytest.approx(expected)
+
+
+def test_unit_weights_match_unweighted_exactly():
+    occ = random_obstacles(48, 48, 8, seed=3)
+    passable = ~occ
+    free = np.argwhere(passable)
+    rng = np.random.default_rng(3)
+    for _ in range(5):
+        a, b = (tuple(free[i]) for i in rng.integers(len(free), size=2))
+        plain = search(passable, a, goal=b)
+        ones = search(passable, a, goal=b, cost_mult=np.ones(passable.shape))
+        assert plain.cost == ones.cost and plain.expansions == ones.expansions
+        assert (plain.path is None) == (ones.path is None)
+        if plain.path is not None:
+            assert np.array_equal(plain.path, ones.path)
+
+
+def test_cost_mult_below_one_rejected():
+    passable = np.ones((4, 4), dtype=bool)
+    with pytest.raises(ValueError, match=">= 1"):
+        search(passable, (0, 0), goal=(3, 3), cost_mult=np.full((4, 4), 0.5))

@@ -1,6 +1,6 @@
 import pytest
 
-from voronav.config import load_config
+from voronav.config import MapSourceConfig, load_config, load_q2_config
 
 
 def test_load_shipped_configs():
@@ -21,3 +21,36 @@ def test_bad_backend_rejected(tmp_path):
     p.write_text("bench:\n  backends: [cuda_magic]\n")
     with pytest.raises(ValueError):
         load_config(p)
+
+
+def test_load_shipped_q2_configs():
+    for name in ("debug_q2", "bench_q2_quick", "bench_q2"):
+        cfg = load_q2_config(f"configs/{name}.yaml")
+        assert cfg.q2.maps and cfg.q2.planners
+        assert all(isinstance(m, MapSourceConfig) for m in cfg.q2.maps)
+    quick = load_q2_config("configs/bench_q2_quick.yaml")
+    # the everyday config must not depend on downloaded data
+    assert all(not m.kind.endswith("_dir") for m in quick.q2.maps)
+
+
+@pytest.mark.parametrize("body, match", [
+    ("q2:\n  querys_per_map: 3\n", "querys_per_map"),
+    ("q2:\n  maps:\n    - {kind: corridor, sizes: [64], gap: 8, gapp: 3}\n", "gapp"),
+    ("roadmap:\n  backend: cuda_magic\n", "backend"),
+    ("q2:\n  planners: [voronoi, dstar]\n", "dstar"),
+    ("q2:\n  lambdas: [-1]\n", "lambdas"),
+    ("q2:\n  rrt_every: 0\n", "rrt_every"),
+    ("q2:\n  min_dist_frac: 1.5\n", "min_dist_frac"),
+    ("q2:\n  maps: []\n", "at least one"),
+    ("q2:\n  maps:\n    - {kind: lava_lake, sizes: [64]}\n", "kind"),
+    ("q2:\n  maps:\n    - {kind: corridor, sizes: [64]}\n", "gap"),
+    ("q2:\n  maps:\n    - {kind: corridor, sizes: [64], gap: 8, seeds: [1]}\n", "seeds"),
+    ("q2:\n  maps:\n    - {kind: random_obstacles, n_shapes: 5}\n", "sizes"),
+    ("q2:\n  maps:\n    - {kind: movingai_dir}\n", "dir"),
+    ("q2:\n  maps:\n    - {kind: image_dir, dir: x, sizes: [64]}\n", "sizes"),
+])
+def test_bad_q2_config_rejected(tmp_path, body, match):
+    p = tmp_path / "bad.yaml"
+    p.write_text(body)
+    with pytest.raises(ValueError, match=match):
+        load_q2_config(p)
