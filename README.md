@@ -26,7 +26,7 @@ studied only as the high-dimensional Voronoi chapter (Q5).
 | # | Question | Status |
 | --- | --- | --- |
 | Q1 | How does parallel JFA scale across backends, threads and grid size, and how much error does each variant leave? | **results in** (below); GPU and scheduling causes measured and fixed |
-| Q2 | Voronoi roadmap vs grid A* vs RRT*: clearance, length, time, success | **answered** (below): safer than A* in 99% of queries; ties tuned weighted A* on clearance, wins on query speed |
+| Q2 | Voronoi roadmap vs grid A* vs RRT*: clearance, length, time, success | **answered** (below): safer than A* in 99.5% of queries; ties tuned weighted A* on clearance, wins on query speed |
 | Q3 | How does segmentation error carry through to path safety? | planned (week 5) |
 | Q4 | SAM variants on-device: latency vs mask quality vs path quality | planned (week 6) |
 | Q5 | High-dimensional Voronoi (k-means IVF) for place recognition: recall vs dimension | stretch (week 7) |
@@ -125,7 +125,8 @@ throttling and background load.
 128²–1024², a corridor, 3 two-room maps, 50 MovingAI maps in 5 sets, 20
 HouseExpo houses), up to 50 seeded start/goal pairs per map, robot radius 2 px.
 Every planner ran the same **4,100 queries**: 58,220 planner runs in 17
-minutes on the M4 MacBook Air. All successful paths from every planner passed
+minutes on the M4 MacBook Air. Roadmap bridges are clearance-weighted
+(`bridge_lam: 64`); see "Study history" below for the earlier run. All successful paths from every planner passed
 the independent collision check (exact EDT), with **zero failures**. Grid A*,
 weighted A* and every Voronoi variant solved 4,100 of 4,100; RRT* (3,000
 iterations, every 5th query) solved 656 of 820. Raw data:
@@ -135,19 +136,19 @@ iterations, every 5th query) solved 656 of 820. Raw data:
 
 | planner (raw paths) | length / A* (median) | mean clearance | min clearance | median query |
 | --- | --- | --- | --- | --- |
-| Grid A* | 1.00 | 16.6 px | 2.93 px | 1.08 ms |
-| Weighted A*, λ = 16 | 1.07 | 24.6 px | 6.98 px | 4.26 ms |
-| Weighted A*, λ = 64 | 1.11 | 26.5 px | 7.29 px | 5.18 ms |
-| **Voronoi, `nearest`** (original) | 1.25 | 28.1 px | 6.60 px | **0.66 ms** |
-| Voronoi, `nearest-road16` | 1.27 | 28.8 px | 6.92 px | 0.89 ms |
-| **Voronoi, `best64`** (joint join, weighted roadmap) | 1.18 | 28.2 px | 7.19 px | 3.63 ms |
+| Grid A* | 1.00 | 16.6 px | 2.93 px | 1.12 ms |
+| Weighted A*, λ = 16 | 1.07 | 24.6 px | 6.98 px | 4.36 ms |
+| Weighted A*, λ = 64 | 1.11 | 26.5 px | 7.29 px | 5.28 ms |
+| **Voronoi, `nearest`** (original) | 1.25 | 28.3 px | 6.80 px | **0.78 ms** |
+| Voronoi, `nearest-road16` | 1.26 | 29.0 px | 7.12 px | 1.02 ms |
+| **Voronoi, `best64`** (joint join, weighted roadmap) | 1.18 | 28.4 px | 7.24 px | 3.96 ms |
 | RRT* (pure Python, 656 solved) | 0.96 | 20.8 px | 3.31 px | 184 ms |
 
 **Against grid A\*, the claim holds.** On the same queries, the original
-Voronoi planner's minimum clearance was at least A*'s in **99%** of queries,
-mean clearance was 11.5 px higher (+69%), and paths were 25% longer. Queries
-were 1.6× faster once the roadmap was built. The build pays for itself after
-about 120 queries per map:
+Voronoi planner's minimum clearance was at least A*'s in **99.5%** of queries,
+mean clearance was 11.7 px higher (+70%), and paths were 25% longer. Queries
+were 1.5× faster once the roadmap was built. The build pays for itself after
+about 46 queries per map:
 
 ![Amortized time](docs/q2/q2_amortized.png)
 
@@ -156,13 +157,13 @@ the difference.** Weighted A* traces a smooth curve of length against
 clearance, and the Voronoi variants sit at its high-clearance end. Paired by
 query, `best64` against λ = 64:
 
-- minimum clearance equal or higher in **95%** of queries (median difference
-  exactly 0), mean clearance +1.7 px, paths 5.7% longer, queries 1.7× faster;
+- minimum clearance equal or higher in **96.5%** of queries (median difference
+  exactly 0), mean clearance +1.8 px, paths 5.8% longer, queries 1.5× faster;
 - the speedup grows with map size (2.4–2.7× on random 512²–1024²) and
   *reverses* on small maps (0.7× on HouseExpo houses, which average 311 px),
   where the three-layer joint join costs more than it saves;
-- `nearest-road16` against λ = 16 trades the other way: 3.8× faster and
-  +4.1 px mean clearance, but 16.5% longer.
+- `nearest-road16` against λ = 16 trades the other way: 3.6× faster and
+  +4.4 px mean clearance, but 16.4% longer.
 
 So the honest headline is: **Voronoi roadmaps match the safety of a tuned
 weighted A\*, and are faster per query on large maps once built.** It is not
@@ -170,15 +171,20 @@ that they are uniquely safe.
 
 **Where Voronoi loses:**
 
-1. **Rare but large minimum-clearance losses.** In 72 of 4,100 queries, `best64`'s
-   narrowest point was more than 2 px tighter than weighted A*'s (worst
-   16 px), concentrated on street maps, HouseExpo and Baldur's Gate. That's
-   why its *average* minimum (7.19 px) trails λ = 64 (7.29 px) despite the
-   95% tie-or-win rate. The cause has not been diagnosed yet.
+1. **Rare but large minimum-clearance losses.** In 43 of 4,100 queries
+   (72 with shortest-path bridges), `best64`'s narrowest point was more than
+   2 px tighter than weighted A*'s (worst 16 px), concentrated on street maps.
+   That's why its *average* minimum (7.24 px) still trails λ = 64 (7.29 px)
+   despite the 96.5% tie-or-win rate. The causes were diagnosed on the
+   original 72 (docs/Q2_HARNESS.md): the open map edge (29), shortest-path
+   bridges (23, now fixed), the λ cost setting (17) and skeleton gaps (3).
+   The map edge remains: the roadmap treats the edge of an unwalled map as
+   open space, so it doesn't steer away from it.
 2. **Narrow-passage maps** (supplement, below): 1.8–2.4× longer paths on room
    maps for about 1 px more clearance.
-3. **Build cost on fragmented skeletons:** Baldur's Gate maps average 62
-   bridges and 220 ms to build, against 10–100 ms elsewhere at similar size.
+3. **Fragmented skeletons need many bridges:** Baldur's Gate maps average 62
+   per map and room maps 865. Since the repair became a single pass, builds
+   stay at a median of 10–260 ms per map family (the 1024² maps are slowest).
 
 **Smoothing** (applied identically to every planner, never lowering the
 minimum clearance) closes most of the length gap. Smoothed `best64` is 1.13×
@@ -199,14 +205,29 @@ they are reported here as a separate condition (`configs/bench_q2_narrow.yaml`;
 | set | Voronoi `nearest` vs A*: length | mean clearance gain | `best64` vs λ = 64 weighted A*: length | speedup |
 | --- | --- | --- | --- | --- |
 | maze (10) | 1.24× | +3.6 px | 1.02× | 1.9× |
-| room (10) | **2.02×** | +3.2 px | **1.89×** | 4.1× |
+| room (10) | **2.10×** | +3.2 px | **1.92×** | 4.2× |
 
 Room maps are Voronoi's worst case. Every 1 px door limits all planners to
 the same minimum clearance, so the skeleton's detours through room centers
-buy almost nothing. The repair is also expensive here: the 8-room maps need
-about 2,950 bridges and 25 s to build, because `connect_pieces` runs one
-search per bridge. RRT* solved 1 of 200 queries in these maps, the known
+buy almost nothing. Clearance-weighted bridges make this slightly worse than
+shortest ones (2.02× in the first run). The skeleton is extremely fragmented
+(the 8-room maps need about 2,950 bridges), which originally took 25 s to
+repair with one search per bridge; the single-pass repair builds every room
+map in 79–117 ms. RRT* solved 1 of 200 queries in these maps, the known
 failure of sampling planners in narrow passages.
+
+### Study history
+
+The study was run twice, and both versions are in git history.
+
+- **v1** (commit `c06bd4e`): shortest-path bridges. 72 large clearance
+  losses to weighted A*, a 95.0% tie-or-win rate, and up to 25 s builds on
+  room maps.
+- **v2** (this section): after diagnosing those losses, bridges are
+  clearance-weighted and the repair runs as a single pass. Large losses fell
+  to 43, the tie-or-win rate rose to 96.5%, the original planner's minimum
+  clearance rose from 6.60 to 6.80 px, and builds got 2–300× faster. Same
+  maps, queries and seeds; only the roadmap changed.
 
 ### Caught by a fail-loud check
 
@@ -341,7 +362,7 @@ pauses 2 s between rows to limit thermal-throttling bias:
 
 The Q2 study needs the benchmark maps (`scripts/fetch_maps.py`, about 64 MB;
 see `docs/DATA.md`). The main sweep takes about 17 minutes and the
-narrow-passage supplement about 8, mostly single-core:
+narrow-passage supplement about 7, mostly single-core:
 
 ```bash
 .venv/bin/python scripts/bench_plan.py --config configs/bench_q2.yaml
@@ -351,7 +372,7 @@ narrow-passage supplement about 8, mostly single-core:
 
 ## Testing
 
-214 tests run in about 9 s on a laptop with no downloads. Every property test
+216 tests run in about 9 s on a laptop with no downloads. Every property test
 runs on every available backend (NumPy, Numba, PyTorch CPU, and MPS or CUDA
 when present).
 
