@@ -14,11 +14,24 @@ dependencies = [
 
 [project.optional-dependencies]
 torch = ["torch>=2.4"]
+# Q4 floor segmentation. SAM 2 is not on PyPI under Meta's name, so it is
+# pinned to a commit of facebookresearch/sam2; install with
+#   SAM2_BUILD_CUDA=0 pip install --no-build-isolation "SAM-2 @ git+<url>@<pin>"
+#   pip install -e ".[vision]"
+# (see docs/Q4_SAM.md) so it builds against the venv's torch, without CUDA.
+vision = [
+    "torch>=2.5.1",
+    "torchvision>=0.20.1",
+    "SAM-2 @ git+https://github.com/facebookresearch/sam2.git@2b90b9f5ceec907a1c18123530e92e794ad901a4",
+]
 dev = ["pytest>=8.0"]
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+allow-direct-references = true  # the SAM 2 git pin in the vision extra
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/voronav"]
