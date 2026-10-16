@@ -1,0 +1,22 @@
+# Tiny CPU config: runs the whole harness in seconds. Used by the smoke test.
+map:
+  kind: points
+  height: 64
+  width: 64
+  n_sites: 16
+  seed: 0
+
+voronoi:
+  backend: numpy
+  variant: jfa+1
+
+bench:
+  sizes: [64, 128]
+  site_densities: [0.005]
+  backends: [numpy, numba, torch]
+  variants: [jfa, jfa+1]
+  numba_threads: [1, 2]
+  torch_devices: [cpu]
+  repeats: 2
+  warmup: 1
+  out_dir: runs/debug

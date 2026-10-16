@@ -1,0 +1,21 @@
+# Q1: how does from-scratch JFA scale across backends, threads and grid size,
+# and how much error does each variant leave against the exact diagram?
+#
+# Sizes stop at 2048: the NumPy reference is the slow baseline and must still
+# finish. Thread counts cover 1..10 for the M4's 10 cores (4P + 6E — expect the
+# speedup curve to bend at 4, where efficiency cores take over).
+map:
+  kind: points
+
+bench:
+  sizes: [256, 512, 1024, 2048]
+  site_densities: [0.0001, 0.001, 0.01]
+  backends: [numpy, numba, torch]
+  variants: [jfa, jfa+1, jfa+2, 1+jfa]
+  numba_threads: [1, 2, 4, 6, 8, 10]
+  torch_devices: [cpu, mps]
+  repeats: 5
+  warmup: 2
+  measure_error: true
+  seed: 0
+  out_dir: runs/bench_q1
