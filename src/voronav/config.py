@@ -64,6 +64,10 @@ class BenchConfig:
     measure_error: bool = True
     seed: int = 0
     out_dir: str = "runs/bench"
+    # Pause after each timed configuration. On a fanless laptop (MacBook Air)
+    # sustained all-core load throttles the chip, which slows later rows and
+    # biases comparisons toward whatever ran first.
+    cooldown_s: float = 0.0
 
     def __post_init__(self) -> None:
         for b in self.backends:
@@ -77,6 +81,8 @@ class BenchConfig:
                 raise ValueError(f"bench.numba_schedules: unknown schedule {sch!r}")
         if self.repeats < 1:
             raise ValueError("bench.repeats must be >= 1")
+        if self.cooldown_s < 0:
+            raise ValueError("bench.cooldown_s must be >= 0")
 
 
 @dataclass

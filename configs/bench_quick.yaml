@@ -1,0 +1,20 @@
+# Everyday check: the fast backends only, sizes up to 1024, one variant.
+# About 10 seconds of light load, safe to run anytime on a fanless laptop.
+# Not a substitute for bench_q1.yaml: no NumPy baseline, no thread sweep.
+map:
+  kind: points
+
+bench:
+  sizes: [256, 512, 1024]
+  site_densities: [0.001]
+  backends: [numba, torch]
+  variants: [jfa+1]
+  numba_threads: [1, 4]
+  numba_schedules: [dynamic]
+  torch_devices: [mps]
+  repeats: 3
+  warmup: 1
+  measure_error: true
+  seed: 0
+  cooldown_s: 0.5
+  out_dir: runs/bench_quick

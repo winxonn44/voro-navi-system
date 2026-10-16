@@ -26,7 +26,7 @@ studied only as the high-dimensional Voronoi chapter (Q5).
 | # | Question | Status |
 | --- | --- | --- |
 | Q1 | How does parallel JFA scale across backends, threads and grid size, and how much error does each variant leave? | **results in** (below); GPU and scheduling causes measured and fixed |
-| Q2 | Voronoi roadmap vs grid A* vs RRT*: clearance, length, time, success | planned (weeks 3–4) |
+| Q2 | Voronoi roadmap vs grid A* vs RRT*: clearance, length, time, success | **planners built** (week 3, below); benchmark sweep is week 4 |
 | Q3 | How does segmentation error carry through to path safety? | planned (week 5) |
 | Q4 | SAM variants on-device: latency vs mask quality vs path quality | planned (week 6) |
 | Q5 | High-dimensional Voronoi (k-means IVF) for place recognition: recall vs dimension | stretch (week 7) |
@@ -119,6 +119,49 @@ choice made in Q2 by whether the residual error changes paths.
 Caveats: one seed, one machine, and laptop timings are sensitive to thermal
 throttling and background load.
 
+## Week 3: roadmap and planners (built, not yet benchmarked)
+
+![Planners on example maps](docs/q2/q2_example.png)
+
+- **Roadmap:** obstacle boundary pixels → JFA (`jfa+2`, exact in every Q1
+  instance) → generalized Voronoi diagram (GVD) pixels → one connected skeleton
+  per free region. It takes 3–20 ms at 256² on the M4.
+- **Planners:** the Voronoi planner joins the skeleton at the nearest skeleton
+  pixel, follows it with A*, and leaves it at the goal. Grid A* and
+  multi-source Dijkstra are compiled with Numba and share one search routine.
+  RRT* is a pure-Python baseline, so only its path quality is comparable, not
+  its timing.
+- **Metrics** use SciPy's exact distance transform, independent of the
+  JFA field the roadmap was built on, so the planner doesn't grade its own work.
+- **First look (not a result):** on 15 random queries over 4 maps (robot
+  radius 2 px), Voronoi paths averaged 21.6 px mean clearance against 13.9 for
+  A*, and were about 24% longer. The real comparison, on MovingAI and HouseExpo
+  maps, is week 4.
+
+Three design problems were caught while building this, and all are kept as tests:
+
+1. **The angle rule broke real roadmap edges.** The first test for a GVD edge
+   was angle-only: the two nearest sites must subtend at least 60°. It removed
+   real boundaries where two different obstacles lie in similar directions
+   from a pixel, splitting one free region's roadmap into about 120 pieces.
+   Now sites on *different* obstacles always form an edge, and the angle rule
+   (with a 2 px tolerance for pixel staircases on curves) applies only within
+   one obstacle. Obstacles are labeled with the outer 1 px frame removed, so a
+   border wall doesn't merge everything that touches it.
+2. **Pruning to the largest piece deleted a door.** Keeping only the largest
+   skeleton piece per region cut the line through a door between two rooms.
+   Pieces are now joined by the shortest safe path between them, and only
+   fragments under 8 px are dropped. `n_bridges`, `bridge_px` and `n_pruned`
+   are recorded for every map.
+3. **RRT\* collision check too coarse.** RRT* checked segments every 0.5 px
+   while the independent metric checked every 0.25 px, and the metric caught
+   corner pixels the planner had skipped. Both now use 0.25 px.
+
+**Known limitation:** joining the skeleton at the *nearest* pixel can make a
+short detour into a corner spur (visible at the start of the two-rooms path).
+Shortcutting the entry and exit segments is a week-4 candidate, to be
+measured, not assumed.
+
 ## Design notes
 
 - **One representation.** A Voronoi diagram is `nearest[H, W]` (int64): the
@@ -160,9 +203,15 @@ src/voronav/
     jfa_numpy.py       reference JFA
     jfa_numba.py       multithreaded CPU JFA (dynamic or static row scheduling)
     jfa_torch.py       fused int32 Metal kernel on MPS; eager int64 on CPU / CUDA
-configs/               debug.yaml (seconds), bench_q1.yaml (full Q1 sweep)
+  planning/
+    roadmap.py         GVD extraction, frame-aware obstacle labels, piece bridging
+    grid_search.py     Numba A* / multi-source Dijkstra, 8-connected, no corner cutting
+    planners.py        Voronoi roadmap, grid A*, RRT* (baseline)
+    metrics.py         length / clearance / smoothness against the exact EDT
+configs/               debug.yaml (seconds), bench_quick.yaml (~10 s),
+                       bench_q1.yaml (full Q1 sweep, heavy)
 scripts/               bench_jfa.py (harness -> JSONL), plot_q1.py (figures),
-                       probe_mps.py (why eager MPS was slow)
+                       probe_mps.py (why eager MPS was slow), plan_demo.py (Q2 figure)
 tests/                 property, cross-backend, loader, config, end-to-end
 ```
 
@@ -170,14 +219,23 @@ tests/                 property, cross-backend, loader, config, end-to-end
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -e ".[dev,torch]"
-.venv/bin/python -m pytest -q
+.venv/bin/python -m pytest -q                                          # ~5 s
+.venv/bin/python scripts/bench_jfa.py --config configs/bench_quick.yaml # ~10 s, light
+.venv/bin/python scripts/plan_demo.py --out docs/q2                     # ~2 s
+```
+
+The full Q1 study (`configs/bench_q1.yaml`) is about 5,000 diagrams and over
+30 minutes of all-core load. On a fanless laptop, run it once, plugged in; it
+pauses 2 s between rows to limit thermal-throttling bias:
+
+```bash
 .venv/bin/python scripts/bench_jfa.py --config configs/bench_q1.yaml
 .venv/bin/python scripts/plot_q1.py runs/bench_q1/results.jsonl --out docs/q1
 ```
 
 ## Testing
 
-126 tests run in about 20 s on a laptop with no downloads. Every property test
+149 tests run in about 5 s on a laptop with no downloads. Every property test
 runs on every available backend (NumPy, Numba, PyTorch CPU, and MPS or CUDA
 when present).
 
@@ -192,6 +250,18 @@ when present).
   gives the same output at any thread count, schedule and chunk size. Both
   MPS paths (the fused Metal kernel and eager int64) are tested separately,
   including on a site lattice full of exact ties.
+- **Grid search:** A* path costs match SciPy's csgraph Dijkstra on the same
+  graph (an independent oracle). Also covered: no corner cutting, the
+  nearest-target Dijkstra, and unreachable goals.
+- **Roadmap:** the corridor skeleton is exactly the centerline; the roadmap
+  passes through a door between two rooms; there is one connected piece per free
+  region; the robot radius is respected; obstacles touching the border are labeled
+  separately; bridging and fragment-dropping are checked by hand.
+- **Planners:** a corridor end-to-end test with a known answer. A* runs
+  straight along the wall (109 px, clearance 2), while Voronoi follows the
+  centerline (clearance ≥ 7) and is longer. Every planner's path is
+  collision-free under the independent check; A* is never beaten on grid
+  length; RRT* is reproducible from its seed.
 - **End to end:** the benchmark harness and the plotting script run on the debug config
   and produce well-formed rows and figures.
 
@@ -205,4 +275,9 @@ when present).
   Voronoi Graph", IJRR 2000 (generalized Voronoi diagram roadmaps)
 - Sturtevant, "Benchmarks for Grid-Based Pathfinding", IEEE TCIAIG 2012
   (MovingAI maps)
+- Karaman & Frazzoli, "Sampling-based Algorithms for Optimal Motion
+  Planning", IJRR 2011 (RRT*)
+- Attali & Montanvert, "Computing and Simplifying 2D and 3D Continuous
+  Skeletons", CVIU 1997; Shaked & Bruckstein, "Pruning Medial Axes", CVIU 1998
+  (object-angle pruning)
 - Kirillov et al., "Segment Anything", ICCV 2023; Ravi et al., "SAM 2", 2024

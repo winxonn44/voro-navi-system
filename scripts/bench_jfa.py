@@ -2,7 +2,8 @@
 densities, variants and thread counts, and measure error against the exact
 Euclidean distance transform. One JSON line per configuration.
 
-    python scripts/bench_jfa.py --config configs/bench_q1.yaml
+    python scripts/bench_jfa.py --config configs/bench_quick.yaml   # ~10 s, everyday check
+    python scripts/bench_jfa.py --config configs/bench_q1.yaml      # full study, run plugged in
 
 Error is backend-independent (the backends are bit-identical, see
 tests/test_backends_agree.py), so it is computed once per
@@ -174,6 +175,8 @@ def main() -> None:
                             f"median={row['median_s'] * 1e3:9.2f} ms  "
                             f"err={row.get('error_rate', float('nan')):.2e}"
                         )
+                        if bench.cooldown_s:
+                            time.sleep(bench.cooldown_s)
     print(f"wrote {out_path}")
 
 

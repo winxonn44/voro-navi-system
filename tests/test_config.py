@@ -4,7 +4,7 @@ from voronav.config import load_config
 
 
 def test_load_shipped_configs():
-    for name in ("debug", "bench_q1"):
+    for name in ("debug", "bench_quick", "bench_q1"):
         cfg = load_config(f"configs/{name}.yaml")
         assert cfg.bench.sizes
 

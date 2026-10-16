@@ -1,6 +1,10 @@
 # Q1: how does from-scratch JFA scale across backends, threads and grid size,
 # and how much error does each variant leave against the exact diagram?
 #
+# HEAVY: ~5,000 diagrams, 30+ minutes of sustained all-core load. On a fanless
+# MacBook Air run it once, plugged in, before publishing; use bench_quick.yaml
+# for everyday checks. The cool-down pause limits throttling bias between rows.
+#
 # Sizes stop at 2048: the NumPy reference is the slow baseline and must still
 # finish. Thread counts cover 1..10 for the M4's 10 cores (4P + 6E — expect the
 # speedup curve to bend at 4, where efficiency cores take over). Both Numba
@@ -20,4 +24,5 @@ bench:
   warmup: 2
   measure_error: true
   seed: 0
+  cooldown_s: 2.0
   out_dir: runs/bench_q1
