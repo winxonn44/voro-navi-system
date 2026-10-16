@@ -26,8 +26,9 @@ Finally, the angle test can still cut a real connection: through a door in
 a wall that is one obstacle, the door's skeleton line fades out a few pixels
 into each room as the two door jambs subtend a shrinking angle. So the
 roadmap is *repaired*, not pruned: within each free region, pieces are joined
-to the largest one by the shortest safe path to the nearest piece (`connect_pieces`;
-`bridge_lam` > 0 makes it the cheapest clearance-weighted path instead).
+along a minimum spanning tree of shortest safe paths between neighboring
+pieces (`connect_pieces`; `bridge_lam` > 0 makes them the cheapest
+clearance-weighted paths instead).
 Only fragments under `min_piece_px` are dropped. `Roadmap.n_bridges`,
 `bridge_px` and `n_pruned` record what the repair did, so its effect on path
 clearance can be measured rather than hidden. (The first version kept only
@@ -42,9 +43,11 @@ from dataclasses import dataclass
 
 import numpy as np
 from scipy.ndimage import label, maximum_filter
+from scipy.sparse import coo_matrix
+from scipy.sparse.csgraph import minimum_spanning_tree
 
 from ..maps import boundary_sites
-from .grid_search import reachable_components, search
+from .grid_search import reachable_components, source_field
 from ..voronoi import distance_sq, voronoi
 
 # Squared site separation must exceed this as well: adjacent and diagonal
@@ -111,12 +114,18 @@ def connect_pieces(
     move rule the searches use (regions: 4-connected; skeleton pieces:
     diagonal steps allowed where both corner cells are safe), so every
     piece of a region can actually be bridged and then traversed.
-    In each region of `safe`: drop pieces smaller than
-    `min_piece_px` (unless it is the region's only piece), then grow a tree
-    from the largest piece, repeatedly adding the shortest safe path from the
-    tree to the nearest remaining piece (multi-source Dijkstra). With
-    bridge_lam > 0 (needs `clearance`), bridges are the cheapest paths under
-    step cost 1 + bridge_lam / clearance instead of the shortest ones.
+    In each region of `safe`: drop pieces smaller than `min_piece_px`
+    (never the region's largest piece), then join the rest along a minimum
+    spanning tree. One multi-source Dijkstra from every kept piece gives each
+    safe pixel its nearest piece (`source_field`); two pieces whose
+    territories touch are joined by the cheapest path through the two
+    territories, and the tree keeps the cheapest set of such joins that
+    connects the region (Mehlhorn's Steiner-tree approximation). That is one
+    search for the whole map instead of one per bridge: the first version
+    grew a tree from the largest piece one shortest path at a time, which
+    took 25 s for the ~2,950 bridges of a MovingAI 8-room map.
+    With bridge_lam > 0 (needs `clearance`), costs are step length times
+    1 + bridge_lam / clearance, so bridges keep away from walls.
     Returns the repaired skeleton and {"n_pruned", "n_bridges", "bridge_px",
     "bridges"} (the last is the mask of pixels the bridges added).
     """
@@ -138,37 +147,47 @@ def connect_pieces(
     size = np.bincount(pieces.ravel(), minlength=n_pieces + 1)
     region_of = np.zeros(n_pieces + 1, dtype=np.int64)
     region_of[pieces[skeleton]] = regions[skeleton]
-    by_region: dict[int, list[int]] = {}
-    for piece in range(1, n_pieces + 1):
-        by_region.setdefault(int(region_of[piece]), []).append(piece)
+    # the largest piece of each region (ties: lowest label) is always kept
+    order = np.lexsort((-size[1:], region_of[1:])) + 1  # stable: by region, largest first
+    lead = order[np.r_[True, region_of[order[1:]] != region_of[order[:-1]]]]
+    keep = size >= min_piece_px
+    keep[0] = False
+    keep[lead] = True
+    dropped = skeleton & ~keep[pieces]
+    out &= ~dropped
+    stats["n_pruned"] = int(dropped.sum())
+    n_kept = int(keep.sum())
+    n_tree_regions = len(np.unique(region_of[keep]))
+    if n_kept == n_tree_regions:
+        return out, stats  # one piece per region already
 
-    for r, members in by_region.items():
-        members.sort(key=lambda p: -size[p])
-        largest, rest = members[0], members[1:]
-        for p in rest:
-            if size[p] < min_piece_px:
-                out[pieces == p] = False
-                stats["n_pruned"] += int(size[p])
-        remaining = [p for p in rest if size[p] >= min_piece_px]
-        if not remaining:
-            continue
-        region = regions == r
-        tree = pieces == largest
-        todo = np.isin(pieces, remaining)
-        while todo.any():
-            res = search(safe & region, start_mask=tree, goal_mask=todo, cost_mult=mult)
-            if res.path is None:  # cannot happen inside one region; fail loudly
-                raise RuntimeError("skeleton piece unreachable inside its own region")
-            ys, xs = res.path[:, 0], res.path[:, 1]
-            stats["n_bridges"] += 1
-            stats["bridge_px"] += int((~out[ys, xs]).sum())
-            stats["bridges"][ys, xs] |= ~out[ys, xs]
-            out[ys, xs] = True
-            reached = pieces[res.path[-1, 0], res.path[-1, 1]]
-            joined = (pieces == reached)
-            tree |= joined
-            tree[ys, xs] = True
-            todo &= ~joined
+    _, parent, owner, (cu, cv, cost) = source_field(safe, np.where(keep[pieces], pieces, 0), mult)
+    flat_owner = owner.ravel()
+    a, b = flat_owner[cu], flat_owner[cv]
+    lo, hi = np.minimum(a, b), np.maximum(a, b)
+    # cheapest contact per pair of pieces, then the spanning tree over them
+    pick = np.lexsort((cost, hi, lo))
+    pair = lo[pick] * (n_pieces + 1) + hi[pick]
+    best = pick[np.r_[True, pair[1:] != pair[:-1]]]
+    tree = minimum_spanning_tree(coo_matrix(
+        (cost[best], (lo[best], hi[best])), shape=(n_pieces + 1, n_pieces + 1))).tocoo()
+    if tree.nnz != n_kept - n_tree_regions:  # cannot happen inside one region; fail loudly
+        raise RuntimeError("skeleton piece unreachable inside its own region")
+    contact = {(int(x), int(y)): k for x, y, k in zip(lo[best], hi[best], best)}
+    w = skeleton.shape[1]
+    for x, y in sorted(zip(tree.row.tolist(), tree.col.tolist())):
+        k = contact[(min(x, y), max(x, y))]
+        chain = []
+        for node in (int(cu[k]), int(cv[k])):  # each end back to its own piece
+            while node >= 0:
+                chain.append(node)
+                node = int(parent[node])
+        ys, xs = np.divmod(np.array(chain, dtype=np.int64), w)
+        stats["n_bridges"] += 1
+        new = ~out[ys, xs]
+        stats["bridge_px"] += int(new.sum())  # pixels are unique within one bridge
+        stats["bridges"][ys[new], xs[new]] = True
+        out[ys, xs] = True
     return out, stats
 
 

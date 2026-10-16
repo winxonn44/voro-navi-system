@@ -62,8 +62,12 @@ weighted A*.
 `roadmap.bridge_lam` > 0 builds the repair bridges (`connect_pieces`) as
 clearance-weighted paths instead of shortest ones. `Roadmap.bridges` is the
 mask of pixels the bridges added; the map rows record `n_bridges` and
-`bridge_px` as before. Default 0: bridges were never a path's bottleneck
-(see below).
+`bridge_px` as before. The code default is 0 (shortest bridges); the Q2
+configs use 64 since week 5, because on real maps shortest bridges *were* a
+path's bottleneck (see "Week 5" below; the quick config could not show it).
+Since week 5 the repair is one multi-source Dijkstra from every kept piece
+plus a minimum spanning tree over pieces whose territories touch ("Week 5:
+repair speed").
 
 ### Smoothing
 
@@ -127,7 +131,7 @@ raise):
 
 ```yaml
 roadmap:
-  bridge_lam: 0            # > 0: clearance-weighted repair bridges
+  bridge_lam: 64           # > 0: clearance-weighted repair bridges (0 = shortest)
 q2:
   voronoi_variants:        # one Voronoi row per entry; the first is the original
     - {name: nearest}
@@ -254,7 +258,8 @@ above, from a separate script on the same queries.)
   the same minimum clearance shrinks from about 8× to about 1.9× (λ = 64).
 * Clearance-weighted bridges (`bridge_lam: 16`, separate run) moved a few
   bridge pixels (11 → 13 and 32 → 29 on two maps) and changed no path metric
-  to two decimals. Left off.
+  to two decimals. Left off. (Week 5 reversed this: on the real maps of the
+  full study, shortest bridges caused 23 of the 72 large losses.)
 
 ### After smoothing (same paths; length relative to the smoothed A* path)
 
@@ -289,3 +294,150 @@ keeps a small mean-clearance lead, and is still a little longer. Its query
 time lead drops from about 8× to about 2× when the joint join is used. The
 full study (`bench_q2.yaml`, which now carries the same four variants and
 both smoothing modes) has to confirm this on real maps.
+
+## Week 5: the 72 large minimum-clearance losses
+
+The full study found 72 of 4,100 queries where `best64`'s minimum clearance
+was more than 2 px below weighted A* at λ = 64 on the same query (worst
+16.2 px). All 72 were picked from `docs/runs/q2_results.jsonl.gz` and rerun
+with the study's settings. Every rerun reproduced the saved minimum exactly.
+For each query the script recorded:
+
+* where the path's narrowest pixel lies (entry leg, GVD pixel, bridge pixel,
+  exit leg; graded by exact EDT, as in the study),
+* the JFA clearance at that pixel against the exact one,
+* the free-space bottleneck: the largest t for which start and goal are
+  connected through safe pixels with clearance >= t (what any planner
+  could reach),
+* the roadmap bottleneck: the same t, but for paths the joint roadmap
+  search can take (legs + skeleton),
+* the same queries with the map surrounded by a 1-px wall.
+
+**Where the minimum falls:** on a GVD pixel in 40, a bridge pixel in 26, an
+entry or exit leg in 6. **JFA is never the cause:** at all 72 minima the JFA
+clearance equals the exact EDT.
+
+**Causes** (each query assigned to the first that explains it):
+
+| cause | queries | maps |
+| --- | --- | --- |
+| open map edge (metric artifact + no GVD along the edge) | 29 | street, dao, maze |
+| shortest-path bridge along a wall | 23 | HouseExpo, bg512, 1 street |
+| roadmap has a wide route, the λ = 64 cost picks a narrower one | 17 | random, street |
+| skeleton has no route as wide as free space | 3 | street (Boston, Sydney) |
+
+1. **Open map edge (29).** MovingAI street, dao and maze maps have free
+   pixels on the map border (69–76% of the border on street maps). Neither
+   the exact EDT nor the JFA counts the outside of the map as an obstacle,
+   so a path that runs *along the image edge* scores high clearance. Weighted
+   A* finds those paths (its path touches the border in 24 of the 29). The
+   roadmap cannot, because the edge has no Voronoi sites and so produces no
+   GVD edge between an obstacle and the map edge. Example: dao/brc505d
+   q24, weighted A* 19 px along row 0, `best64` 4 px between two obstacles.
+   With the edge treated as a wall, those weighted A* paths score 1 px and
+   the gap disappears in all 29. The worst skeleton-limited case, Boston
+   q4 (16.2 px), is the same effect: weighted A* crosses an open plaza that
+   runs onto the map edge, where the GVD has no edge.
+2. **Shortest-path bridges (23).** With `bridge_lam: 0` a repair bridge is a
+   shortest path, so it hugs the wall it bends around, at exactly the robot
+   radius (2 px) on HouseExpo. When the bridge sits on the only roadmap
+   route between two areas, every query through it inherits that minimum.
+   It also explains 5 of the 6 leg minima (HouseExpo, bg512): a bridge along a
+   wall splits the roadmap cells, so a leg has to squeeze through a door
+   instead. With `bridge_lam: 64` all 23 come within 2 px of weighted A*'s minimum
+   (HouseExpo q13: 2 → 12 px, equal to weighted A*). The week 4b finding ("bridges were never
+   a path's bottleneck") came from the quick config, whose synthetic maps
+   need 0–4 bridges.
+3. **Cost choice (17).** The roadmap does contain a route as wide as the
+   free-space bottleneck, but the additive cost 1 + 64/clearance prefers a
+   shorter route through a narrower gap. Weighted A* makes the opposite
+   choice on these queries because the wide route costs it less in free
+   space than along the skeleton, which zig-zags between small obstacles in
+   random maps. This is the λ trade-off, not a defect; a bottleneck
+   objective (maximize the minimum, then length) would remove it, at the
+   cost of a second search.
+4. **Skeleton gap (3).** Boston q8 and Sydney q40 lose 2.5–3.5 px where the
+   skeleton's widest route is narrower than free space's. Too few to act on.
+
+Ruled out: JFA vs exact EDT (0 of 72), and bridges built as shortest paths
+anywhere except the 23 above.
+
+### Targeted rerun (study queries, `best64` vs weighted A* λ = 64)
+
+The study's saved queries on bg512, HouseExpo, street, dao, maze and random
+maps (3,900 queries, 78 maps). Light run, M4 MacBook Air, one run; only these
+two planners.
+
+| roadmap | map edge | `best64` min | wA* λ=64 min | tie or win | losses > 2 px | worst | length / wA* |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| study (old repair, `bridge_lam` 0) | open | 6.99 | 7.09 | — | 72 | 16.2 | — |
+| new repair, `bridge_lam` 0 | open | 6.98 | 7.09 | 95.1% | 80 | 16.2 | 1.073 |
+| new repair, `bridge_lam` 16 | open | 7.04 | 7.09 | 96.4% | 45 | 16.2 | 1.071 |
+| new repair, `bridge_lam` 64 | open | 7.04 | 7.09 | 96.5% | 43 | 16.2 | 1.071 |
+| new repair, `bridge_lam` 0 | wall | 6.96 | 7.01 | 97.2% | 40 | 15.0 | 1.074 |
+| new repair, `bridge_lam` 64 | wall | 7.00 | 7.01 | 98.4% | **10** | 15.0 | 1.071 |
+
+(9 queries whose start or goal sat on the border are dropped in the "wall"
+rows. The study row is the saved data on the same 3,900 queries.)
+
+* The new repair at `bridge_lam` 0 changes 33 of 3,900 `best64` minima
+  (mean −0.003 px), because it breaks ties between equally short bridges
+  differently. That is 8 more losses than the study. Shortest bridges pick
+  arbitrarily among equal-length routes, so which ones graze a wall is luck:
+  one more reason to weight them.
+* **Fixed:** the Q2 configs now set `bridge_lam: 64`. Loss count 80 → 43,
+  mean minimum +0.06 px, paths no longer, build +4–25 ms per map.
+* **Not fixed, needs a decision:** treating the map edge as a wall changes
+  the metric and the queries for every map with an open border, so it needs
+  a full rerun. With it and weighted bridges, losses drop to 10, and
+  weighted A*'s mean minimum also drops (7.09 → 7.01), because part of its
+  lead came from running along the image edge.
+* Quick config (`bench_q2_quick.yaml`, 96 queries, new repair +
+  `bridge_lam: 64`): every Voronoi metric equals the previous quick run to
+  two decimals (`best64` min 5.30, mean 17.12; wA* λ=64 5.30 / 16.00); 0
+  collisions. (Three A* goals moved 1 px against the saved quick run, which
+  predates the region-labeling fix in query sampling.)
+
+## Week 5: repair speed
+
+`connect_pieces` used to grow a tree from the region's largest skeleton
+piece, one multi-source Dijkstra per bridge: O(bridges × pixels). The
+MovingAI 8-room maps (radius 1) need about 2,950 bridges, so the repair took
+25 s per map.
+
+Now it is one pass:
+
+1. `grid_search.source_field`: a single multi-source Dijkstra from every
+   kept piece (the searches' move rule, optional 1 + λ/clearance cost)
+   labels each safe pixel with its nearest piece and keeps the parent tree.
+2. Every move between pixels of two different pieces' territories is a
+   candidate join, with cost g(u) + step + g(v). The cheapest per pair of
+   pieces forms a graph, and `scipy.sparse.csgraph.minimum_spanning_tree`
+   picks the joins (Mehlhorn's Steiner-tree approximation).
+3. Each tree edge becomes a bridge: both parent chains back to their pieces.
+
+Regions are connected, so each region's territory graph is connected and
+its tree spans all of its pieces. The function still raises if one does not
+(the old "unreachable inside its own region" check). Pruning,
+`n_pruned`, `n_bridges`, `bridge_px` and the `bridges` mask are unchanged in
+meaning. The diagonal-pinch test and the new many-pieces test pass.
+
+Repair-only comparison, old vs new, on all 120 maps of the three Q2 configs
+(`bridge_lam` 0, same skeleton input):
+
+| map | bridges | old | new |
+| --- | --- | --- | --- |
+| 8room_000 / 001 | 2,964 / 2,950 | 25.9 s / 25.1 s | 0.063 s / 0.059 s |
+| 16room_000 / 001 | 904 / 918 | 7.8 s / 8.1 s | 0.069 s / 0.057 s |
+| 32room_000 | 237 | 1.41 s | 0.048 s |
+| maze512-8-0 | 30 | 0.66 s | 0.048 s |
+| bg512 AR0709SR | 96 | 0.58 s* | 0.036 s* |
+| street Paris | 38 | 0.47 s | 0.041 s |
+| all 120 maps | | 87.8 s | 3.5 s |
+
+(*full build_roadmap, JFA included.) `n_bridges`, `bridge_px` and `n_pruned`
+match the old repair on all 120 maps. The skeletons are bit-identical on 35.
+On the other 85 the new repair takes a different but equally short path for
+some bridges (as many pixels added as removed). Full builds of the 8-room
+maps drop from about 25 s to 0.08 s; bg512 maps from 0.1–0.6 s to
+0.03–0.04 s.

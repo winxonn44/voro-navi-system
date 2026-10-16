@@ -134,3 +134,28 @@ def test_reachable_components_matches_search_rules():
     a, na = reachable_components(~occ)
     b, nb = label(~occ, structure=REACHABILITY)
     assert na == nb and np.array_equal(a > 0, b > 0)
+
+
+def test_connect_pieces_many_pieces_one_tree():
+    # A dashed skeleton: 40 pieces of 9 px in one room. The repair joins them
+    # with exactly 39 bridges (a spanning tree), in one search.
+    safe = np.ones((40, 400), dtype=bool)
+    skel = np.zeros_like(safe)
+    for x0 in range(0, 400, 10):
+        skel[20, x0:x0 + 9] = True
+    out, stats = connect_pieces(skel, safe)
+    assert stats["n_bridges"] == 39 and stats["bridge_px"] == 39
+    assert reachable_components(out, corner_ok=safe)[1] == 1
+    assert stats["bridges"].sum() == stats["bridge_px"] and not (stats["bridges"] & skel).any()
+
+
+def test_source_field_labels_nearest_source():
+    from voronav.planning.grid_search import source_field
+    safe = np.ones((5, 21), dtype=bool)
+    labels = np.zeros(safe.shape, dtype=np.int64)
+    labels[2, 0], labels[2, 20] = 1, 2
+    g, parent, owner, (u, v, cost) = source_field(safe, labels)
+    assert owner[2, 5] == 1 and owner[2, 15] == 2 and g[2, 5] == 5.0
+    assert (owner > 0).all() and len(u) > 0
+    assert (owner.ravel()[u] != owner.ravel()[v]).all()
+    assert cost.min() == pytest.approx(20.0)  # the straight join through the middle

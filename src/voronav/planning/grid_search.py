@@ -251,6 +251,129 @@ def search(
 
 
 # ---------------------------------------------------------------------------
+# Nearest-source field: one multi-source Dijkstra, every pixel labeled
+# ---------------------------------------------------------------------------
+
+
+@njit(cache=True)
+def _source_field(passable, labels, dys, dxs, mult, use_w):
+    """Dijkstra from every labeled pixel at once (`search`'s move rules with
+    corner_ok = passable). Returns cost g, parent (-1 at sources and
+    unreached pixels) and owner (the label of the source each pixel was
+    reached from; 0 if unreached), all flat."""
+    h, w = passable.shape
+    n = h * w
+    g = np.full(n, np.inf)
+    parent = np.full(n, -1, dtype=np.int64)
+    owner = np.zeros(n, dtype=np.int64)
+    closed = np.zeros(n, dtype=np.bool_)
+    keys = np.empty(1024, dtype=np.float64)
+    vals = np.empty(1024, dtype=np.int64)
+    size = 0
+    for y in range(h):
+        for x in range(w):
+            if labels[y, x] > 0 and passable[y, x]:
+                u = y * w + x
+                g[u] = 0.0
+                owner[u] = labels[y, x]
+                keys, vals = _push(keys, vals, size, 0.0, u)
+                size += 1
+    while size > 0:
+        _, u = _pop(keys, vals, size)
+        size -= 1
+        if closed[u]:
+            continue
+        closed[u] = True
+        uy, ux = u // w, u % w
+        for i in range(8):
+            vy, vx = uy + dys[i], ux + dxs[i]
+            if vy < 0 or vy >= h or vx < 0 or vx >= w or not passable[vy, vx]:
+                continue
+            if i >= 4:
+                if not (passable[vy, ux] and passable[uy, vx]):
+                    continue
+                step = np.sqrt(2.0)
+            else:
+                step = 1.0
+            if use_w:
+                step = step * mult[vy, vx]
+            v = vy * w + vx
+            if closed[v]:
+                continue
+            cand = g[u] + step
+            if cand < g[v]:
+                g[v] = cand
+                parent[v] = u
+                owner[v] = owner[u]
+                keys, vals = _push(keys, vals, size, cand, v)
+                size += 1
+    return g, parent, owner
+
+
+@njit(cache=True)
+def _owner_contacts(passable, owner, g, dys, dxs, mult, use_w):
+    """Every move (u -> v) between pixels owned by different sources, as
+    arrays (u, v, cost of source(u) -> u -> v -> source(v)). Right, down and
+    the two downward diagonals cover each unordered pair once."""
+    h, w = passable.shape
+    us = []
+    vs = []
+    cs = []
+    for uy in range(h):
+        for ux in range(w):
+            u = uy * w + ux
+            if owner[u] == 0:
+                continue
+            for i in (3, 1, 6, 7):  # right, down, down-left, down-right
+                vy, vx = uy + dys[i], ux + dxs[i]
+                if vy < 0 or vy >= h or vx < 0 or vx >= w:
+                    continue
+                v = vy * w + vx
+                if owner[v] == 0 or owner[v] == owner[u]:
+                    continue
+                if i >= 4:
+                    if not (passable[vy, ux] and passable[uy, vx]):
+                        continue
+                    step = np.sqrt(2.0)
+                else:
+                    step = 1.0
+                if use_w:
+                    step = step * 0.5 * (mult[uy, ux] + mult[vy, vx])
+                us.append(u)
+                vs.append(v)
+                cs.append(g[u] + step + g[v])
+    return np.array(us, dtype=np.int64), np.array(vs, dtype=np.int64), np.array(cs, dtype=np.float64)
+
+
+def source_field(
+    passable: np.ndarray, labels: np.ndarray, cost_mult: np.ndarray | None = None
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, tuple[np.ndarray, np.ndarray, np.ndarray]]:
+    """Grow every labeled source (labels > 0, on passable pixels) through
+    `passable` at once, with `search`'s move rules (corner_ok = passable) and
+    optional step-cost multiplier. Returns (cost [H, W], parent flat [H*W],
+    owner [H, W], contacts), where owner is the label of the nearest source
+    (0 = unreachable) and contacts = (u, v, cost) for every move between
+    pixels of different owners: the cheapest such move for a pair of labels
+    gives the cheapest path between them that passes only through their own
+    two territories (as in Mehlhorn's Steiner tree approximation)."""
+    h, w = passable.shape
+    if labels.shape != (h, w):
+        raise ValueError("labels must have the grid's shape")
+    if cost_mult is None:
+        mult, use_w = np.ones((1, 1)), False
+    else:
+        mult = np.ascontiguousarray(cost_mult, dtype=np.float64)
+        if not (mult[passable] >= 1.0).all():
+            raise ValueError("cost_mult must be >= 1 on passable pixels")
+        use_w = True
+    pas = np.ascontiguousarray(passable, dtype=np.bool_)
+    g, parent, owner = _source_field(pas, np.ascontiguousarray(labels, dtype=np.int64),
+                                     _DY, _DX, mult, use_w)
+    contacts = _owner_contacts(pas, owner, g, _DY, _DX, mult, use_w)
+    return g.reshape(h, w), parent, owner.reshape(h, w), contacts
+
+
+# ---------------------------------------------------------------------------
 # Joint roadmap search: entry leg -> roadmap -> exit leg in one A*
 # ---------------------------------------------------------------------------
 

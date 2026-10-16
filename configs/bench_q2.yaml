@@ -7,7 +7,7 @@
 roadmap:
   backend: numba
   variant: jfa+2
-  bridge_lam: 0  # shortest bridges; bridges were never a path's bottleneck (docs/Q2_HARNESS.md)
+  bridge_lam: 64  # clearance-weighted bridges: shortest ones caused 23 of the 72 big clearance losses (docs/Q2_HARNESS.md)
 
 q2:
   maps:
