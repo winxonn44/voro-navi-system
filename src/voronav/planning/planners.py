@@ -1,7 +1,9 @@
 """The planners compared in Q2.
 
   voronoi: get onto the GVD roadmap, travel along it, get off at the goal.
-           Maximum clearance by construction.
+           Maximum clearance by construction. How it joins and leaves the
+           roadmap, and whether roadmap travel is clearance-weighted, are
+           options (`voronoi_plan`); the defaults are the original planner.
   astar:   shortest 8-connected path through safe free space. The baseline
            that the clearance claim is measured against.
   weighted_astar: grid A* where entering a pixel costs 1 + lambda / clearance
@@ -24,7 +26,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from .grid_search import search
+from .grid_search import roadmap_search, search
 from .roadmap import Roadmap
 
 
@@ -53,26 +55,73 @@ def _check_endpoints(safe: np.ndarray, start, goal) -> None:
 # ---------------------------------------------------------------------------
 
 
-def voronoi_plan(rm: Roadmap, start: tuple[int, int], goal: tuple[int, int]) -> PlanResult:
-    """Connect start and goal to the nearest skeleton pixel (multi-target
-    Dijkstra through safe space), then A* along the skeleton only."""
+JOIN_MODES = ("nearest", "best")
+
+
+def voronoi_plan(
+    rm: Roadmap,
+    start: tuple[int, int],
+    goal: tuple[int, int],
+    join: str = "nearest",
+    join_lam: float = 0.0,
+    roadmap_lam: float = 0.0,
+) -> PlanResult:
+    """Get onto the roadmap, travel along it, get off at the goal.
+
+    join="nearest" (the original planner, with the defaults): Dijkstra from
+    start and from goal to the first skeleton pixel reached, then A* along
+    the skeleton between the two. The legs and the roadmap leg are chosen
+    separately, so the join pixel can be the tip of a dead-end corner spur.
+
+    join="best": one A* over (entry leg, roadmap, exit leg) picks the join
+    and leave pixels that minimize the total cost (`roadmap_search`). A leg
+    never crosses the skeleton, so it stays in its endpoint's roadmap cell.
+
+    join_lam weights leg steps by 1 + join_lam / clearance (0 = shortest leg);
+    roadmap_lam weights roadmap steps the same way (0 = shortest roadmap
+    route, which may squeeze through a narrow gap when a wider route
+    exists). With join="best" the legs should be weighted (join_lam > 0):
+    an unweighted leg costs no more per pixel than the roadmap, so the
+    search may run the leg alongside the roadmap instead of joining it.
+    """
+    if join not in JOIN_MODES:
+        raise ValueError(f"join must be one of {JOIN_MODES}")
     _check_endpoints(rm.safe, start, goal)
     t0 = time.perf_counter()
     expansions = 0
+    info = {"join": join, "join_lam": join_lam, "roadmap_lam": roadmap_lam}
 
     def fail(reason: str) -> PlanResult:
-        return PlanResult("voronoi", None, time.perf_counter() - t0, expansions, {"fail": reason})
+        return PlanResult("voronoi", None, time.perf_counter() - t0, expansions,
+                          {**info, "fail": reason})
 
     if not rm.skeleton.any():
         return fail("empty roadmap")
-    entry = search(rm.safe, start, goal_mask=rm.skeleton)
-    exit_ = search(rm.safe, goal, goal_mask=rm.skeleton)
+    leg_mult = clearance_cost(rm.clearance, join_lam) if join_lam > 0 else None
+    road_mult = clearance_cost(rm.clearance, roadmap_lam) if roadmap_lam > 0 else None
+
+    if join == "best":
+        ones = None
+        if leg_mult is None or road_mult is None:
+            ones = np.ones(rm.safe.shape)
+        res = roadmap_search(rm.safe, rm.skeleton, start, goal,
+                             ones if leg_mult is None else leg_mult,
+                             ones if road_mult is None else road_mult)
+        expansions += res.expansions
+        if res.path is None:
+            return fail("roadmap unreachable or disconnected")
+        return PlanResult("voronoi", res.path.astype(np.float64), time.perf_counter() - t0,
+                          expansions, {**info, "entry_px": int((res.layer == 0).sum()),
+                                       "exit_px": int((res.layer == 2).sum())})
+
+    entry = search(rm.safe, start, goal_mask=rm.skeleton, cost_mult=leg_mult)
+    exit_ = search(rm.safe, goal, goal_mask=rm.skeleton, cost_mult=leg_mult)
     expansions += entry.expansions + exit_.expansions
     if entry.path is None or exit_.path is None:
         return fail("cannot reach roadmap")
     on = tuple(entry.path[-1])
     off = tuple(exit_.path[-1])
-    core = search(rm.skeleton, on, goal=off, corner_ok=rm.safe)
+    core = search(rm.skeleton, on, goal=off, corner_ok=rm.safe, cost_mult=road_mult)
     expansions += core.expansions
     if core.path is None:
         return fail("roadmap disconnected")
@@ -82,7 +131,7 @@ def voronoi_plan(rm: Roadmap, start: tuple[int, int], goal: tuple[int, int]) -> 
         path,
         time.perf_counter() - t0,
         expansions,
-        {"entry_px": len(entry.path) - 1, "exit_px": len(exit_.path) - 1},
+        {**info, "entry_px": len(entry.path) - 1, "exit_px": len(exit_.path) - 1},
     )
 
 

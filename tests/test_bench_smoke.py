@@ -52,8 +52,8 @@ def test_q2_bench_and_plot_end_to_end(tmp_path):
     for m in maps:
         assert m["build_s"] > 0 and m["n_nodes"] > 0 and m["n_queries"] == 3
         assert {"n_bridges", "bridge_px", "n_pruned", "pixels", "machine"} <= set(m)
-    # per query: voronoi + astar + 2 lambdas, plus RRT* on queries 0 and 2
-    assert len(queries) == 3 * (3 * 4 + 2)
+    # per query: 2 voronoi variants + astar + 2 lambdas, plus RRT* on queries 0 and 2
+    assert len(queries) == 3 * (3 * 5 + 2)
     for q in queries:
         assert q["plan_s"] >= 0 and q["expansions"] >= 0
         assert q["euclid_px"] >= math.hypot(q["height"], q["width"]) / 3 - 1e-9
@@ -61,17 +61,23 @@ def test_q2_bench_and_plot_end_to_end(tmp_path):
         if q["planner"] in ("voronoi", "astar", "weighted_astar"):
             # complete planners, endpoints in one safe region
             assert q["success"] and q["collision_free"]
+        for mode in ("safe", "preserve"):  # smoothed metrics on every planner's row
+            if q["success"]:
+                assert q[f"{mode}_collision_free"]
+                assert q[f"{mode}_length_px"] <= q["length_px"] + 1e-6
     by_query = {}
     for q in queries:  # every planner saw the same start/goal
         by_query.setdefault((q["map"], q["query"]), set()).add((tuple(q["start"]), tuple(q["goal"])))
     assert all(len(v) == 1 for v in by_query.values())
     assert {q["lam"] for q in queries if q["planner"] == "weighted_astar"} == {4, 32}
+    assert {q["variant"] for q in queries if q["planner"] == "voronoi"} == {"nearest", "best"}
+    assert {q["variant"] for q in queries if q["planner"] != "voronoi"} == {None}
 
     subprocess.run(
         [sys.executable, "scripts/plot_q2.py", str(tmp_path / "results.jsonl"),
          "--out", str(tmp_path / "figs")],
         cwd=ROOT, check=True, capture_output=True,
     )
-    for name in ("q2_tradeoff.png", "q2_success.png", "q2_query_time.png",
-                 "q2_build_time.png", "q2_amortized.png"):
+    for name in ("q2_tradeoff.png", "q2_tradeoff_safe.png", "q2_tradeoff_preserve.png",
+                 "q2_success.png", "q2_query_time.png", "q2_build_time.png", "q2_amortized.png"):
         assert (tmp_path / "figs" / name).stat().st_size > 0

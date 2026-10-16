@@ -201,3 +201,167 @@ def search(
     flat = np.array(nodes[::-1], dtype=np.int64)
     path = np.stack(np.divmod(flat, w), axis=1)
     return SearchResult(path, float(g[found]), int(expansions))
+
+
+# ---------------------------------------------------------------------------
+# Joint roadmap search: entry leg -> roadmap -> exit leg in one A*
+# ---------------------------------------------------------------------------
+
+
+@njit(cache=True)
+def _leg_cell(safe, skel, goal, dys, dxs):
+    """Pixels a leg can reach from `goal` (same move rules as `_layered`):
+    the goal's cell of the roadmap. Restricting the exit layer to it keeps
+    the joint search from flooding every cell next to the roadmap."""
+    h, w = safe.shape
+    cell = np.zeros((h, w), dtype=np.bool_)
+    gy, gx = goal // w, goal % w
+    if skel[gy, gx]:
+        return cell
+    stack = np.empty(h * w, dtype=np.int64)
+    stack[0] = goal
+    top = 1
+    cell[gy, gx] = True
+    while top > 0:
+        top -= 1
+        u = stack[top]
+        uy, ux = u // w, u % w
+        for i in range(8):
+            vy, vx = uy + dys[i], ux + dxs[i]
+            if vy < 0 or vy >= h or vx < 0 or vx >= w or not safe[vy, vx]:
+                continue
+            if skel[vy, vx] or cell[vy, vx]:
+                continue
+            if i >= 4 and not (safe[vy, ux] and safe[uy, vx]):
+                continue
+            if i >= 4 and skel[vy, ux] and skel[uy, vx]:
+                continue
+            cell[vy, vx] = True
+            stack[top] = vy * w + vx
+            top += 1
+    return cell
+
+
+@njit(cache=True)
+def _layered(safe, skel, start, goal, leg_mult, road_mult, dys, dxs):
+    """A* over three copies of the grid: layer 0 = entry leg, 1 = roadmap,
+    2 = exit leg. Legs move through safe non-skeleton pixels and may not
+    slip diagonally between two skeleton pixels (that would cross the
+    roadmap without joining it). The only way from layer 0 to 1 is stepping
+    onto a skeleton pixel, and from 1 to 2 stepping off one."""
+    h, w = safe.shape
+    n = h * w
+    g = np.full(3 * n, np.inf)
+    parent = np.full(3 * n, -1, dtype=np.int64)
+    closed = np.zeros(3 * n, dtype=np.bool_)
+    keys = np.empty(1024, dtype=np.float64)
+    vals = np.empty(1024, dtype=np.int64)
+    size = 0
+    gy, gx = goal // w, goal % w
+    s0 = start if not skel[start // w, start % w] else n + start
+    g[s0] = 0.0
+    keys, vals = _push(keys, vals, size, _octile(start // w, start % w, gy, gx), s0)
+    size += 1
+    target = (n + goal) if skel[gy, gx] else (2 * n + goal)
+    exit_ok = _leg_cell(safe, skel, goal, dys, dxs)
+    expansions = 0
+    while size > 0:
+        _, u = _pop(keys, vals, size)
+        size -= 1
+        if closed[u]:
+            continue
+        closed[u] = True
+        expansions += 1
+        if u == target:
+            return parent, g, u, expansions
+        layer = u // n
+        p = u % n
+        uy, ux = p // w, p % w
+        for i in range(8):
+            vy, vx = uy + dys[i], ux + dxs[i]
+            if vy < 0 or vy >= h or vx < 0 or vx >= w or not safe[vy, vx]:
+                continue
+            on = skel[vy, vx]
+            if layer == 0:
+                nl = 1 if on else 0
+            elif layer == 1:
+                nl = 1 if on else 2
+            else:
+                if on:
+                    continue
+                nl = 2
+            if nl == 2 and not exit_ok[vy, vx]:
+                continue
+            if i >= 4:
+                if not (safe[vy, ux] and safe[uy, vx]):
+                    continue
+                if nl != 1 and layer != 1 and skel[vy, ux] and skel[uy, vx]:
+                    continue  # leg crossing the roadmap diagonally
+                step = np.sqrt(2.0)
+            else:
+                step = 1.0
+            # Same accounting as the original planner's separate searches:
+            # a leg step costs the multiplier of its pixel nearer the roadmap
+            # (the destination on the way in, the source on the way out).
+            if nl == 1:
+                step = step * (road_mult[vy, vx] if layer == 1 else leg_mult[vy, vx])
+            elif nl == 0:
+                step = step * leg_mult[vy, vx]
+            else:
+                step = step * leg_mult[uy, ux]
+            v = nl * n + vy * w + vx
+            if closed[v]:
+                continue
+            cand = g[u] + step
+            if cand < g[v]:
+                g[v] = cand
+                parent[v] = u
+                keys, vals = _push(keys, vals, size, cand + _octile(vy, vx, gy, gx), v)
+                size += 1
+    return parent, g, -1, expansions
+
+
+@dataclass
+class LayeredResult:
+    path: np.ndarray | None  # int64 [N, 2] (y, x), start first
+    layer: np.ndarray | None  # int8 [N]: 0 entry leg, 1 roadmap, 2 exit leg
+    cost: float
+    expansions: int
+
+
+def roadmap_search(
+    safe: np.ndarray,
+    skeleton: np.ndarray,
+    start: tuple[int, int],
+    goal: tuple[int, int],
+    leg_mult: np.ndarray,
+    road_mult: np.ndarray,
+) -> LayeredResult:
+    """Cheapest start -> (leg) -> roadmap -> (leg) -> goal path, with the join
+    and leave pixels chosen jointly instead of each leg ending at its nearest
+    skeleton pixel. Legs cost step * leg_mult, roadmap moves step * road_mult
+    (both >= 1, so the octile heuristic stays admissible). A leg never
+    crosses the skeleton, so it stays in the start's (goal's) own cell of the
+    roadmap."""
+    h, w = safe.shape
+    for name, m in (("leg_mult", leg_mult), ("road_mult", road_mult)):
+        if m.shape != (h, w) or not (m[safe] >= 1.0).all():
+            raise ValueError(f"{name} must have the grid's shape and be >= 1 on safe pixels")
+    if not (safe[start] and safe[goal]):
+        raise ValueError("start and goal must be safe")
+    skel = np.ascontiguousarray(skeleton & safe, dtype=np.bool_)
+    parent, g, found, expansions = _layered(
+        np.ascontiguousarray(safe, dtype=np.bool_), skel,
+        start[0] * w + start[1], goal[0] * w + goal[1],
+        np.ascontiguousarray(leg_mult, dtype=np.float64),
+        np.ascontiguousarray(road_mult, dtype=np.float64), _DY, _DX,
+    )
+    if found < 0:
+        return LayeredResult(None, None, float("inf"), int(expansions))
+    nodes = [found]
+    while parent[nodes[-1]] >= 0:
+        nodes.append(parent[nodes[-1]])
+    states = np.array(nodes[::-1], dtype=np.int64)
+    layer, flat = np.divmod(states, h * w)
+    path = np.stack(np.divmod(flat, w), axis=1)
+    return LayeredResult(path, layer.astype(np.int8), float(g[found]), int(expansions))

@@ -7,6 +7,7 @@
 roadmap:
   backend: numba
   variant: jfa+2
+  bridge_lam: 0  # shortest bridges; bridges were never a path's bottleneck (docs/Q2_HARNESS.md)
 
 q2:
   maps:
@@ -25,3 +26,12 @@ q2:
   rrt_every: 5
   cooldown_s: 2.0
   out_dir: runs/bench_q2
+  # voronoi_plan settings, one row each (field "variant"); the first is the
+  # original planner, so before and after compare on the same queries
+  voronoi_variants:
+    - {name: nearest}
+    - {name: nearest-road16, roadmap_lam: 16}
+    - {name: best16, join: best, join_lam: 16, roadmap_lam: 16}
+    - {name: best64, join: best, join_lam: 64, roadmap_lam: 64}
+  # the same post-process on every planner's path; raw metrics are kept too
+  smoothing: [safe, preserve]

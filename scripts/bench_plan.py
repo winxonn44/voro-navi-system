@@ -6,10 +6,12 @@ vs RRT* on the same seeded queries. One JSON line per map and one per
     python scripts/bench_plan.py --config configs/bench_q2.yaml        # full study, run plugged in
 
 Rows have "row": "map" (roadmap stats, machine info) or "row": "query"
-(success, plan_s, expansions and every path_metrics field). Path metrics use
+(success, plan_s, expansions and every path_metrics field, plus the same
+fields prefixed `<mode>_` for every q2.smoothing mode). Path metrics use
 the exact SciPy EDT of the map, never the JFA field the roadmap and the
 weighted A* cost map are built from. Queries are start/goal pairs in the same
 8-connected safe region, at least `min_dist_frac` of the map diagonal apart.
+Voronoi runs once per q2.voronoi_variants entry (row field "variant").
 RRT* runs on every `rrt_every`-th query only; its rows share query ids with
 the other planners, so comparisons can be restricted to the same queries.
 """
@@ -37,6 +39,7 @@ from voronav.planning import (
     exact_clearance,
     path_metrics,
     rrt_star_plan,
+    smooth_path,
     voronoi_plan,
     weighted_astar_plan,
 )
@@ -70,26 +73,44 @@ def sample_queries(safe: np.ndarray, n: int, min_dist: float, rng: np.random.Gen
 
 
 def run_planners(cfg: Q2Config, rm, query_id: int, start, goal):
-    """(lam, PlanResult) for every configured planner on one query."""
+    """(lam, variant, PlanResult) for every configured planner on one query."""
     q2 = cfg.q2
     for planner in q2.planners:
         if planner == "voronoi":
-            yield None, voronoi_plan(rm, start, goal)
+            for v in q2.voronoi_variants:
+                yield None, v.name, voronoi_plan(rm, start, goal, join=v.join,
+                                                 join_lam=v.join_lam, roadmap_lam=v.roadmap_lam)
         elif planner == "astar":
-            yield None, astar_plan(rm.safe, start, goal)
+            yield None, None, astar_plan(rm.safe, start, goal)
         elif planner == "weighted_astar":
             for lam in q2.lambdas:
-                yield lam, weighted_astar_plan(rm.safe, rm.clearance, start, goal, lam)
+                yield lam, None, weighted_astar_plan(rm.safe, rm.clearance, start, goal, lam)
         elif planner == "rrt_star" and query_id % q2.rrt_every == 0:
-            yield None, rrt_star_plan(rm.safe, start, goal, iters=q2.rrt_iters,
-                                      seed=q2.seed + query_id)
+            yield None, None, rrt_star_plan(rm.safe, start, goal, iters=q2.rrt_iters,
+                                            seed=q2.seed + query_id)
+
+
+def smoothed_metrics(cfg: Q2Config, rm, res, clr) -> dict:
+    """`<mode>_<metric>` and `<mode>_smooth_s` for every configured smoothing
+    mode: the same post-process on every planner's path, graded like the raw
+    path (exact EDT). Null on failure."""
+    out = {}
+    for mode in cfg.q2.smoothing:
+        if not res.success:
+            out.update({f"{mode}_{k}": None for k in (*METRIC_KEYS, "smooth_s")})
+            continue
+        t0 = time.perf_counter()
+        sm = smooth_path(res.path, rm.safe, rm.clearance, mode)
+        out[f"{mode}_smooth_s"] = time.perf_counter() - t0
+        out.update({f"{mode}_{k}": v for k, v in path_metrics(sm, clr, rm.safe).items()})
+    return out
 
 
 def build(cfg: Q2Config, occ: np.ndarray):
     r = cfg.roadmap
     return build_roadmap(occ, robot_radius=cfg.q2.robot_radius, min_angle_deg=r.min_angle_deg,
                          raster_slack_px=r.raster_slack_px, min_piece_px=r.min_piece_px,
-                         backend=r.backend, variant=r.variant)
+                         bridge_lam=r.bridge_lam, backend=r.backend, variant=r.variant)
 
 
 def warmup(cfg: Q2Config) -> None:
@@ -97,8 +118,10 @@ def warmup(cfg: Q2Config) -> None:
     steady-state, not JIT time."""
     rm = build(cfg, two_rooms(60, 100))
     light = replace(cfg, q2=replace(cfg.q2, lambdas=cfg.q2.lambdas[:1], rrt_iters=20))
-    for _ in run_planners(light, rm, 0, (10, 10), (50, 90)):
-        pass
+    for _, _, res in run_planners(light, rm, 0, (10, 10), (50, 90)):
+        if res.success:
+            for mode in cfg.q2.smoothing:
+                smooth_path(res.path, rm.safe, rm.clearance, mode)
 
 
 def main() -> None:
@@ -148,9 +171,10 @@ def main() -> None:
 
             summary: dict[str, list] = {}
             for qi, (start, goal) in enumerate(queries):
-                for lam, res in run_planners(cfg, rm, qi, start, goal):
+                for lam, variant, res in run_planners(cfg, rm, qi, start, goal):
                     metrics = (path_metrics(res.path, clr, rm.safe) if res.success
                                else dict.fromkeys(METRIC_KEYS))
+                    metrics.update(smoothed_metrics(cfg, rm, res, clr))
                     row = {
                         "row": "query", **base,
                         "query": qi,
@@ -159,6 +183,7 @@ def main() -> None:
                         "euclid_px": math.dist(start, goal),
                         "planner": res.planner,
                         "lam": lam,
+                        "variant": variant,
                         "success": res.success,
                         "plan_s": res.plan_s,
                         "expansions": res.expansions,
@@ -166,7 +191,8 @@ def main() -> None:
                         **metrics,
                     }
                     f.write(json.dumps(row) + "\n")
-                    tag = res.planner + ("" if lam is None else f"@{lam:g}")
+                    tag = res.planner + ("" if lam is None else f"@{lam:g}") + (
+                        "" if variant is None else f"[{variant}]")
                     summary.setdefault(tag, []).append(row)
             f.flush()
             parts = []

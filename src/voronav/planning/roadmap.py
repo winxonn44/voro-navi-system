@@ -26,7 +26,8 @@ Finally, the angle test can still cut a real connection: through a door in
 a wall that is one obstacle, the door's skeleton line fades out a few pixels
 into each room as the two door jambs subtend a shrinking angle. So the
 roadmap is *repaired*, not pruned: within each free region, pieces are joined
-to the largest one by the shortest safe path to the nearest piece (`connect_pieces`).
+to the largest one by the shortest safe path to the nearest piece (`connect_pieces`;
+`bridge_lam` > 0 makes it the cheapest clearance-weighted path instead).
 Only fragments under `min_piece_px` are dropped. `Roadmap.n_bridges`,
 `bridge_px` and `n_pruned` record what the repair did, so its effect on path
 clearance can be measured rather than hidden. (The first version kept only
@@ -65,6 +66,7 @@ class Roadmap:
     n_pruned: int = 0      # skeleton pixels dropped as tiny fragments
     n_bridges: int = 0     # paths added to join skeleton pieces in one free region
     bridge_px: int = 0     # pixels those bridges added
+    bridges: np.ndarray | None = None  # bool [H, W], the pixels bridges added
 
     @property
     def n_nodes(self) -> int:
@@ -97,18 +99,34 @@ def obstacle_ids(occ: np.ndarray) -> np.ndarray:
 
 
 def connect_pieces(
-    skeleton: np.ndarray, safe: np.ndarray, min_piece_px: int = 8
+    skeleton: np.ndarray,
+    safe: np.ndarray,
+    min_piece_px: int = 8,
+    clearance: np.ndarray | None = None,
+    bridge_lam: float = 0.0,
 ) -> tuple[np.ndarray, dict]:
     """Make the skeleton one connected piece per free region.
 
     In each 8-connected region of `safe`: drop pieces smaller than
     `min_piece_px` (unless it is the region's only piece), then grow a tree
     from the largest piece, repeatedly adding the shortest safe path from the
-    tree to the nearest remaining piece (multi-source Dijkstra). Returns the
-    repaired skeleton and {"n_pruned", "n_bridges", "bridge_px"}.
+    tree to the nearest remaining piece (multi-source Dijkstra). With
+    bridge_lam > 0 (needs `clearance`), bridges are the cheapest paths under
+    step cost 1 + bridge_lam / clearance instead of the shortest ones.
+    Returns the repaired skeleton and {"n_pruned", "n_bridges", "bridge_px",
+    "bridges"} (the last is the mask of pixels the bridges added).
     """
+    if bridge_lam < 0:
+        raise ValueError("bridge_lam must be >= 0")
+    if bridge_lam > 0 and clearance is None:
+        raise ValueError("bridge_lam > 0 needs the clearance field")
+    mult = None
+    if bridge_lam > 0:
+        with np.errstate(divide="ignore"):
+            mult = np.where(clearance > 0, 1.0 + bridge_lam / clearance, np.inf)
     out = skeleton.copy()
-    stats = {"n_pruned": 0, "n_bridges": 0, "bridge_px": 0}
+    stats = {"n_pruned": 0, "n_bridges": 0, "bridge_px": 0,
+             "bridges": np.zeros_like(skeleton, dtype=bool)}
     pieces, n_pieces = label(skeleton, structure=_EIGHT)
     if n_pieces <= 1:
         return out, stats
@@ -134,12 +152,13 @@ def connect_pieces(
         tree = pieces == largest
         todo = np.isin(pieces, remaining)
         while todo.any():
-            res = search(safe & region, start_mask=tree, goal_mask=todo)
+            res = search(safe & region, start_mask=tree, goal_mask=todo, cost_mult=mult)
             if res.path is None:  # cannot happen inside one region; fail loudly
                 raise RuntimeError("skeleton piece unreachable inside its own region")
             ys, xs = res.path[:, 0], res.path[:, 1]
             stats["n_bridges"] += 1
             stats["bridge_px"] += int((~out[ys, xs]).sum())
+            stats["bridges"][ys, xs] |= ~out[ys, xs]
             out[ys, xs] = True
             reached = pieces[res.path[-1, 0], res.path[-1, 1]]
             joined = (pieces == reached)
@@ -193,6 +212,7 @@ def build_roadmap(
     min_angle_deg: float = 60.0,
     raster_slack_px: float = 2.0,
     min_piece_px: int = 8,
+    bridge_lam: float = 0.0,
     backend: str = "numba",
     variant: str = "jfa+2",
     device: str = "cpu",
@@ -208,7 +228,7 @@ def build_roadmap(
     clearance = np.where(d2 >= 0, np.sqrt(np.maximum(d2, 0)), np.inf)
     safe = ~occ & (clearance >= robot_radius)
     skeleton = gvd_mask(occ, nearest, d2, min_angle_deg, raster_slack_px) & safe
-    skeleton, repair = connect_pieces(skeleton, safe, min_piece_px)
+    skeleton, repair = connect_pieces(skeleton, safe, min_piece_px, clearance, bridge_lam)
     return Roadmap(
         occ=occ,
         nearest=nearest,

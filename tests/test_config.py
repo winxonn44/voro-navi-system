@@ -48,9 +48,28 @@ def test_load_shipped_q2_configs():
     ("q2:\n  maps:\n    - {kind: random_obstacles, n_shapes: 5}\n", "sizes"),
     ("q2:\n  maps:\n    - {kind: movingai_dir}\n", "dir"),
     ("q2:\n  maps:\n    - {kind: image_dir, dir: x, sizes: [64]}\n", "sizes"),
+    ("roadmap:\n  bridge_lam: -1\n", "bridge_lam"),
+    ("q2:\n  voronoi_variants:\n    - {name: a, join: teleport}\n", "join"),
+    ("q2:\n  voronoi_variants:\n    - {name: a, join_lamb: 4}\n", "join_lamb"),
+    ("q2:\n  voronoi_variants:\n    - {name: a, roadmap_lam: -2}\n", "roadmap_lam"),
+    ("q2:\n  voronoi_variants:\n    - {name: a}\n    - {name: a, join: best}\n", "unique"),
+    ("q2:\n  voronoi_variants: []\n", "non-empty"),
+    ("q2:\n  smoothing: [bezier]\n", "bezier"),
+    ("q2:\n  smoothing: [safe, safe]\n", "duplicates"),
 ])
 def test_bad_q2_config_rejected(tmp_path, body, match):
     p = tmp_path / "bad.yaml"
     p.write_text(body)
     with pytest.raises(ValueError, match=match):
         load_q2_config(p)
+
+
+def test_q2_option_names_match_the_planners():
+    from voronav import config
+    from voronav.planning import planners, smoothing
+
+    assert config.JOIN_MODES == planners.JOIN_MODES
+    assert config.SMOOTH_MODES == smoothing.SMOOTH_MODES
+    default = load_q2_config("configs/bench_q2.yaml").q2.voronoi_variants[0]
+    # the first variant is the original planner, so old and new runs compare
+    assert (default.join, default.join_lam, default.roadmap_lam) == ("nearest", 0.0, 0.0)

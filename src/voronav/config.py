@@ -116,12 +116,38 @@ class RoadmapConfig:
     min_angle_deg: float = 60.0
     raster_slack_px: float = 2.0
     min_piece_px: int = 8
+    bridge_lam: float = 0.0  # 0 = shortest bridges; > 0 = clearance-weighted
 
     def __post_init__(self) -> None:
         if self.backend not in BACKENDS:
             raise ValueError(f"roadmap.backend must be one of {BACKENDS}")
         if self.variant not in VARIANTS:
             raise ValueError(f"roadmap.variant must be one of {VARIANTS}")
+        if self.bridge_lam < 0:
+            raise ValueError("roadmap.bridge_lam must be >= 0")
+
+
+JOIN_MODES = ("nearest", "best")
+SMOOTH_MODES = ("safe", "preserve")
+
+
+@dataclass
+class VoronoiVariantConfig:
+    """One setting of voronoi_plan; the defaults are the original planner
+    (nearest skeleton pixel, shortest legs, shortest roadmap route)."""
+
+    name: str = "nearest"
+    join: str = "nearest"
+    join_lam: float = 0.0
+    roadmap_lam: float = 0.0
+
+    def __post_init__(self) -> None:
+        if not self.name:
+            raise ValueError("q2.voronoi_variants: name must be non-empty")
+        if self.join not in JOIN_MODES:
+            raise ValueError(f"q2.voronoi_variants: join must be one of {JOIN_MODES}")
+        if self.join_lam < 0 or self.roadmap_lam < 0:
+            raise ValueError("q2.voronoi_variants: join_lam and roadmap_lam must be >= 0")
 
 
 @dataclass
@@ -143,6 +169,12 @@ class Q2BenchConfig:
     rrt_every: int = 5      # RRT* (pure Python) runs on every k-th query only
     cooldown_s: float = 0.0  # pause after each map (fanless laptop, see BenchConfig)
     out_dir: str = "runs/bench_q2"
+    # each runs as planner "voronoi" with its name in the rows' "variant"
+    voronoi_variants: list[VoronoiVariantConfig] = field(
+        default_factory=lambda: [VoronoiVariantConfig()]
+    )
+    # post-processes applied to every planner's path; raw metrics are kept
+    smoothing: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         self.maps = [m if isinstance(m, MapSourceConfig) else _build(MapSourceConfig, m)
@@ -168,6 +200,19 @@ class Q2BenchConfig:
             raise ValueError("q2.rrt_iters and q2.rrt_every must be >= 1")
         if self.cooldown_s < 0:
             raise ValueError("q2.cooldown_s must be >= 0")
+        self.voronoi_variants = [v if isinstance(v, VoronoiVariantConfig)
+                                 else _build(VoronoiVariantConfig, v)
+                                 for v in self.voronoi_variants]
+        if "voronoi" in self.planners and not self.voronoi_variants:
+            raise ValueError("q2.voronoi_variants must be non-empty when voronoi runs")
+        names = [v.name for v in self.voronoi_variants]
+        if len(set(names)) != len(names):
+            raise ValueError("q2.voronoi_variants: names must be unique")
+        for mode in self.smoothing:
+            if mode not in SMOOTH_MODES:
+                raise ValueError(f"q2.smoothing: unknown mode {mode!r} (one of {SMOOTH_MODES})")
+        if len(set(self.smoothing)) != len(self.smoothing):
+            raise ValueError("q2.smoothing has duplicates")
 
 
 @dataclass

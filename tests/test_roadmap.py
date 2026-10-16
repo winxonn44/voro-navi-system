@@ -5,7 +5,7 @@ import pytest
 from scipy.ndimage import label
 
 from voronav.maps import corridor, random_obstacles
-from voronav.planning import build_roadmap
+from voronav.planning import build_roadmap, exact_clearance
 from voronav.planning.roadmap import connect_pieces, obstacle_ids
 
 EIGHT = np.ones((3, 3), dtype=bool)
@@ -80,3 +80,24 @@ def test_connect_pieces_bridges_and_drops_fragments():
 def test_empty_map_has_no_roadmap():
     rm = build_roadmap(np.zeros((16, 16), dtype=bool))
     assert not rm.skeleton.any() and np.isinf(rm.clearance).all()
+
+
+def test_clearance_weighted_bridges():
+    # Two skeleton pieces; the straight bridge between them grazes a wall
+    # stub, a slightly longer one stays in the open.
+    safe = np.ones((30, 60), dtype=bool)
+    safe[8:15, 28:31] = False  # stub between the pieces' near ends
+    clearance = exact_clearance(~safe)
+    skel = np.zeros_like(safe)
+    skel[11, 5:22] = True
+    skel[11, 37:55] = True
+    short, s0 = connect_pieces(skel, safe, clearance=clearance)
+    wide, s1 = connect_pieces(skel, safe, clearance=clearance, bridge_lam=32.0)
+    assert s0["n_bridges"] == s1["n_bridges"] == 1
+    assert s1["bridge_px"] >= s0["bridge_px"]
+    assert (short | ~s0["bridges"]).all() and s0["bridges"].sum() == s0["bridge_px"]
+    assert clearance[s1["bridges"]].min() > clearance[s0["bridges"]].min()
+    for out in (short, wide):
+        assert label(out, structure=EIGHT)[1] == 1
+    with pytest.raises(ValueError):
+        connect_pieces(skel, safe, bridge_lam=1.0)  # needs the clearance field

@@ -11,6 +11,7 @@ from .planners import (
     weighted_astar_plan,
 )
 from .roadmap import Roadmap, build_roadmap, gvd_mask
+from .smoothing import smooth_path
 
 __all__ = [
     "PlanResult",
@@ -24,6 +25,7 @@ __all__ = [
     "path_metrics",
     "rrt_star_plan",
     "search",
+    "smooth_path",
     "voronoi_plan",
     "weighted_astar_plan",
 ]

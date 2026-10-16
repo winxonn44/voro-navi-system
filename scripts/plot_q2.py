@@ -2,9 +2,11 @@
 
     python scripts/plot_q2.py runs/bench_q2/results.jsonl --out docs/q2
 
-Writes five figures:
+Writes five figures, plus one tradeoff figure per smoothing mode in the file:
   q2_tradeoff.png    mean / minimum clearance vs path length relative to A*
                      on the same query; the weighted-A* lambda sweep is a curve
+  q2_tradeoff_<mode>.png  the same for paths after the <mode> smoothing,
+                     relative to the smoothed A* path
   q2_success.png     success rate per planner
   q2_query_time.png  query-time distribution per planner (log scale)
   q2_build_time.png  roadmap build time vs map size
@@ -70,30 +72,45 @@ def load(path: Path) -> tuple[list[dict], list[dict]]:
     return [r for r in rows if r["row"] == "map"], [r for r in rows if r["row"] == "query"]
 
 
-def series_key(r: dict) -> tuple[str, float | None]:
-    return r["planner"], r["lam"]
+Key = tuple[str, float | None, str | None]  # planner, lambda, Voronoi variant
+# Voronoi variants share the planner's color; marker shapes tell them apart
+VARIANT_MARKERS = ("o", "s", "D", "^", "v", "P")
 
 
-def series_label(key: tuple[str, float | None]) -> str:
-    planner, lam = key
-    return "Weighted A*, λ=%g" % lam if lam is not None else PLANNERS[planner][1]
+def series_key(r: dict) -> Key:
+    return r["planner"], r["lam"], r.get("variant")
 
 
-def ordered(keys) -> list[tuple[str, float | None]]:
-    return sorted(keys, key=lambda k: (ORDER.index(k[0]), k[1] or 0.0))
+def series_label(key: Key) -> str:
+    planner, lam, variant = key
+    if lam is not None:
+        return "Weighted A*, λ=%g" % lam
+    return PLANNERS[planner][1] + (f", {variant}" if variant else "")
 
 
-def plot_tradeoff(queries: list[dict], out: Path) -> None:
-    astar_len = {(r["map"], r["query"]): r["length_px"] for r in queries
+def ordered(keys) -> list[Key]:
+    variants = sorted({k[2] for k in keys if k[2]})
+    return sorted(keys, key=lambda k: (ORDER.index(k[0]), k[1] or 0.0,
+                                       variants.index(k[2]) if k[2] else -1))
+
+
+def smoothing_modes(queries: list[dict]) -> list[str]:
+    return sorted({k[: -len("_smooth_s")] for r in queries for k in r if k.endswith("_smooth_s")})
+
+
+def plot_tradeoff(queries: list[dict], out: Path, mode: str | None = None) -> None:
+    p = f"{mode}_" if mode else ""
+    astar_len = {(r["map"], r["query"]): r[p + "length_px"] for r in queries
                  if r["planner"] == "astar" and r["success"]}
     pts: dict[tuple, list[tuple[float, float, float]]] = defaultdict(list)
     for r in queries:
         ref = astar_len.get((r["map"], r["query"]))
         if r["success"] and ref:
             pts[series_key(r)].append(
-                (r["length_px"] / ref, r["mean_clearance_px"], r["min_clearance_px"]))
+                (r[p + "length_px"] / ref, r[p + "mean_clearance_px"], r[p + "min_clearance_px"]))
     if not pts:
         return
+    variants = sorted({k[2] for k in pts if k[2]})
     fig, axes = plt.subplots(1, 2, figsize=(12, 4.8), facecolor=SURFACE)
     for ax, col, what in ((axes[0], 1, "mean"), (axes[1], 2, "minimum")):
         curve = []
@@ -102,7 +119,8 @@ def plot_tradeoff(queries: list[dict], out: Path) -> None:
             x, y = arr[:, 0].mean(), arr[:, col].mean()
             xe = arr[:, 0].std(ddof=1) / np.sqrt(len(arr)) if len(arr) > 1 else 0
             ye = arr[:, col].std(ddof=1) / np.sqrt(len(arr)) if len(arr) > 1 else 0
-            color, label = PLANNERS[key[0]]
+            color, _ = PLANNERS[key[0]]
+            label = series_label(key)
             if key[0] == "weighted_astar":
                 curve.append((x, y))
                 ax.errorbar(x, y, xerr=xe, yerr=ye, color=color, marker="o", markersize=7,
@@ -111,7 +129,8 @@ def plot_tradeoff(queries: list[dict], out: Path) -> None:
                 ax.annotate(f"λ={key[1]:g}", (x, y), xytext=(6, -10), textcoords="offset points",
                             color=MUTED, fontsize=8)
                 continue
-            ax.errorbar(x, y, xerr=xe, yerr=ye, color=color, marker="o", markersize=10,
+            marker = VARIANT_MARKERS[variants.index(key[2]) % len(VARIANT_MARKERS)] if key[2] else "o"
+            ax.errorbar(x, y, xerr=xe, yerr=ye, color=color, marker=marker, markersize=10,
                         markeredgecolor=SURFACE, markeredgewidth=2, linestyle="none",
                         elinewidth=1, zorder=4, label=f"{label} (n={len(arr)})")
         if curve:
@@ -119,13 +138,16 @@ def plot_tradeoff(queries: list[dict], out: Path) -> None:
             n = len(pts[next(k for k in pts if k[0] == "weighted_astar")])
             ax.plot(*zip(*curve), color=color, linewidth=2, zorder=2,
                     label=f"{label}, λ sweep (n={n})")
-        style(ax, f"{what.capitalize()} clearance vs detour",
+        style(ax, f"{what.capitalize()} clearance vs detour"
+              + (f", after {mode} smoothing" if mode else ""),
               "path length / A* length on the same query", f"{what} clearance along path (px)")
         ax.legend(frameon=False, fontsize=8.5, labelcolor=INK, loc="lower right")
     fig.text(0.01, 0.005, "Means over successful queries, bars = ±1 standard error. Clearance "
-             "from the exact EDT. RRT* runs on a query subset.", color=MUTED, fontsize=8)
+             "from the exact EDT. RRT* runs on a query subset."
+             + (f" Every path, A* included, smoothed the same way ({mode})." if mode else ""),
+             color=MUTED, fontsize=8)
     fig.tight_layout(rect=(0, 0.03, 1, 1))
-    fig.savefig(out / "q2_tradeoff.png", dpi=160)
+    fig.savefig(out / (f"q2_tradeoff_{mode}.png" if mode else "q2_tradeoff.png"), dpi=160)
     plt.close(fig)
 
 
@@ -208,11 +230,13 @@ def plot_build_time(maps: list[dict], out: Path) -> None:
 
 
 def plot_amortized(maps: list[dict], queries: list[dict], out: Path) -> None:
+    """Uses the first Voronoi variant in the file (the config's first entry)."""
+    first = next((r.get("variant") for r in queries if r["planner"] == "voronoi"), None)
     mean_q: dict[tuple[str, str], float] = {}
     for planner in ("voronoi", "astar"):
         by: dict[str, list[float]] = defaultdict(list)
         for r in queries:
-            if r["planner"] == planner:
+            if r["planner"] == planner and (planner != "voronoi" or r.get("variant") == first):
                 by[r["map"]].append(r["plan_s"])
         mean_q.update({(planner, k): float(np.mean(v)) for k, v in by.items()})
     names = [m["map"] for m in maps if ("voronoi", m["map"]) in mean_q
@@ -230,6 +254,7 @@ def plot_amortized(maps: list[dict], queries: list[dict], out: Path) -> None:
     b = np.mean([build[k] for k in names])
     tv = np.mean([mean_q[("voronoi", k)] for k in names])
     ta = np.mean([mean_q[("astar", k)] for k in names])
+    vor_l += f" ({first})" if first else ""
     ax.plot(n, b + n * tv, color=vor_c, lw=2.5, label=f"{vor_l}: build + n queries")
     ax.plot(n, n * ta, color=ast_c, lw=2.5, label=f"{ast_l}: n queries")
     if ta > tv:
@@ -259,6 +284,8 @@ def main() -> None:
     maps, queries = load(args.results)
     args.out.mkdir(parents=True, exist_ok=True)
     plot_tradeoff(queries, args.out)
+    for mode in smoothing_modes(queries):
+        plot_tradeoff(queries, args.out, mode)
     plot_success(queries, args.out)
     plot_query_time(queries, args.out)
     plot_build_time(maps, args.out)

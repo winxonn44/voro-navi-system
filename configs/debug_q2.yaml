@@ -10,3 +10,7 @@ q2:
   rrt_iters: 150
   rrt_every: 2
   out_dir: runs/debug_q2
+  voronoi_variants:
+    - {name: nearest}
+    - {name: best, join: best, join_lam: 16, roadmap_lam: 16}
+  smoothing: [safe, preserve]
