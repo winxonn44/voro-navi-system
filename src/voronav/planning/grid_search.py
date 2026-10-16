@@ -27,6 +27,53 @@ from dataclasses import dataclass
 import numpy as np
 from numba import njit
 
+# When passable == corner_ok (plain grid search through free space), a
+# diagonal move needs both corner cells passable, so reachability is exactly
+# 4-connectivity. Never label search regions with a 3x3 block of ones
+# (8-connectivity): a "region" can then span a diagonal pinch no path can
+# cross (MovingAI dao/lak303d: 4 regions 8-connected, 24 reachable).
+REACHABILITY = np.array([[0, 1, 0], [1, 1, 1], [0, 1, 0]], dtype=bool)
+
+
+def reachable_components(mask: np.ndarray, corner_ok: np.ndarray | None = None) -> tuple[np.ndarray, int]:
+    """Label pixels of `mask` by what `search(mask, corner_ok=...)` can reach:
+    orthogonal neighbors always connect; diagonal neighbors connect only when
+    both corner cells are in `corner_ok` (default: `mask` itself, which is
+    4-connectivity). Returns (labels with 0 = not in mask, count), like
+    scipy.ndimage.label. Needed for the roadmap, whose diagonal steps are
+    checked against free space rather than against the skeleton."""
+    from scipy.sparse import coo_matrix
+    from scipy.sparse.csgraph import connected_components
+
+    mask = np.asarray(mask, dtype=bool)
+    corner_ok = mask if corner_ok is None else np.asarray(corner_ok, dtype=bool)
+    h, w = mask.shape
+    idx = np.arange(h * w).reshape(h, w)
+    rows, cols = [], []
+
+    def link(a_sl, b_sl, ok):
+        rows.append(idx[a_sl][ok])
+        cols.append(idx[b_sl][ok])
+
+    # right, down
+    link((slice(None), slice(0, w - 1)), (slice(None), slice(1, w)), mask[:, :-1] & mask[:, 1:])
+    link((slice(0, h - 1), slice(None)), (slice(1, h), slice(None)), mask[:-1, :] & mask[1:, :])
+    # down-right: corners (y, x+1) and (y+1, x); down-left: (y, x-1) and (y+1, x)
+    dr = mask[:-1, :-1] & mask[1:, 1:] & corner_ok[:-1, 1:] & corner_ok[1:, :-1]
+    link((slice(0, h - 1), slice(0, w - 1)), (slice(1, h), slice(1, w)), dr)
+    dl = mask[:-1, 1:] & mask[1:, :-1] & corner_ok[:-1, :-1] & corner_ok[1:, 1:]
+    link((slice(0, h - 1), slice(1, w)), (slice(1, h), slice(0, w - 1)), dl)
+    r, c = np.concatenate(rows), np.concatenate(cols)
+    graph = coo_matrix((np.ones(len(r), dtype=np.int8), (r, c)), shape=(h * w, h * w))
+    _, comp = connected_components(graph, directed=False)
+    # relabel components of mask pixels as 1..n in scan order, 0 elsewhere
+    comp = comp.reshape(h, w)
+    uniq, first = np.unique(comp[mask], return_index=True)
+    order = np.argsort(first)
+    remap = np.zeros(comp.max() + 1, dtype=np.int64)
+    remap[uniq[order]] = np.arange(1, len(uniq) + 1)
+    return np.where(mask, remap[comp], 0), int(len(uniq))
+
 _DY = np.array([-1, 1, 0, 0, -1, -1, 1, 1], dtype=np.int64)
 _DX = np.array([0, 0, -1, 1, -1, 1, -1, 1], dtype=np.int64)
 

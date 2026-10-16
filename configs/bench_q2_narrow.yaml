@@ -1,0 +1,34 @@
+# Supplement to bench_q2.yaml: the narrow-passage MovingAI sets at robot
+# radius 1 px. In the main study (radius 2 px) every room map and the
+# 2-px-corridor mazes had no start/goal pair in one reachable region: their
+# 1-2 px doors and corridors are closed to a radius-2 robot. Reported as a
+# separate condition, never pooled with the radius-2 results.
+#   python scripts/bench_plan.py --config configs/bench_q2_narrow.yaml
+roadmap:
+  backend: numba
+  variant: jfa+2
+  bridge_lam: 0  # shortest bridges; bridges were never a path's bottleneck (docs/Q2_HARNESS.md)
+
+q2:
+  maps:
+    - {kind: movingai_dir, dir: data/raw/movingai/room}
+    - {kind: movingai_dir, dir: data/raw/movingai/maze}
+  queries_per_map: 50
+  min_dist_frac: 0.333
+  seed: 0
+  robot_radius: 1.0
+  planners: [voronoi, astar, weighted_astar, rrt_star]
+  lambdas: [0.5, 1, 2, 4, 8, 16, 32, 64, 128]
+  rrt_iters: 3000
+  rrt_every: 5
+  cooldown_s: 2.0
+  out_dir: runs/bench_q2_narrow
+  # voronoi_plan settings, one row each (field "variant"); the first is the
+  # original planner, so before and after compare on the same queries
+  voronoi_variants:
+    - {name: nearest}
+    - {name: nearest-road16, roadmap_lam: 16}
+    - {name: best16, join: best, join_lam: 16, roadmap_lam: 16}
+    - {name: best64, join: best, join_lam: 64, roadmap_lam: 64}
+  # the same post-process on every planner's path; raw metrics are kept too
+  smoothing: [safe, preserve]

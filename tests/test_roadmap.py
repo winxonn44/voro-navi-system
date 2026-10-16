@@ -1,6 +1,8 @@
 """GVD roadmap properties on maps where the right answer is known."""
 
 import numpy as np
+
+from voronav.planning.grid_search import REACHABILITY, reachable_components
 import pytest
 from scipy.ndimage import label
 
@@ -35,10 +37,10 @@ def test_two_rooms_and_a_door():
 def test_one_skeleton_piece_per_free_region(seed):
     occ = random_obstacles(128, 128, 12, seed=seed)
     rm = build_roadmap(occ, robot_radius=2.0)
-    regions, n_regions = label(rm.safe, structure=EIGHT)
+    regions, n_regions = label(rm.safe, structure=REACHABILITY)
     for r in range(1, n_regions + 1):
         inside = rm.skeleton & (regions == r)
-        assert label(inside, structure=EIGHT)[1] <= 1
+        assert reachable_components(inside, corner_ok=rm.safe)[1] <= 1
     assert (rm.skeleton <= rm.safe).all()
     # repair should only drop fragments and add short bridges
     assert rm.n_pruned <= 0.15 * (rm.n_nodes + rm.n_pruned)
@@ -101,3 +103,34 @@ def test_clearance_weighted_bridges():
         assert label(out, structure=EIGHT)[1] == 1
     with pytest.raises(ValueError):
         connect_pieces(skel, safe, bridge_lam=1.0)  # needs the clearance field
+
+
+def test_diagonal_pinch_is_not_a_connection():
+    # Two open areas touching only at a corner. Searches may not cut corners,
+    # so they are separate regions; the repair must not try to bridge them
+    # (it raised "skeleton piece unreachable" on MovingAI dao/lak303d).
+    occ = np.ones((41, 41), dtype=bool)
+    occ[1:20, 1:20] = False   # top-left room
+    occ[20:40, 20:40] = False  # bottom-right room, touching at (19,19)/(20,20)
+    rm = build_roadmap(occ)    # must not raise
+    regions, n = label(rm.safe, structure=REACHABILITY)
+    assert n == 2
+    for r in (1, 2):
+        assert reachable_components(rm.skeleton & (regions == r), corner_ok=rm.safe)[1] == 1
+
+
+def test_reachable_components_matches_search_rules():
+    from voronav.planning import search
+    mask = np.array([[1, 0, 0],
+                     [0, 1, 0],
+                     [0, 0, 1]], dtype=bool)
+    # corners blocked: three separate pieces, as the search sees it
+    assert reachable_components(mask)[1] == 3
+    # corners free (as on a skeleton inside open space): one piece
+    assert reachable_components(mask, corner_ok=np.ones((3, 3), bool))[1] == 1
+    assert search(mask, (0, 0), goal=(2, 2), corner_ok=np.ones((3, 3), bool)).path is not None
+    # plain free-space regions equal 4-connectivity
+    occ = random_obstacles(64, 64, 10, seed=1)
+    a, na = reachable_components(~occ)
+    b, nb = label(~occ, structure=REACHABILITY)
+    assert na == nb and np.array_equal(a > 0, b > 0)

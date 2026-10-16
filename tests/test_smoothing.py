@@ -3,6 +3,8 @@ the exact EDT), never lengthens, and `preserve` never gives back minimum
 clearance."""
 
 import numpy as np
+
+from voronav.planning.grid_search import REACHABILITY
 import pytest
 from scipy.ndimage import label
 
@@ -22,7 +24,7 @@ EIGHT = np.ones((3, 3), dtype=bool)
 
 
 def _queries(rm, n, seed):
-    regions, _ = label(rm.safe, structure=EIGHT)
+    regions, _ = label(rm.safe, structure=REACHABILITY)
     rng = np.random.default_rng(seed)
     pix = np.argwhere(regions == np.bincount(regions.ravel())[1:].argmax() + 1)
     return [(tuple(pix[i]), tuple(pix[j])) for i, j in rng.integers(len(pix), size=(n, 2))]

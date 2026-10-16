@@ -44,7 +44,7 @@ import numpy as np
 from scipy.ndimage import label, maximum_filter
 
 from ..maps import boundary_sites
-from .grid_search import search
+from .grid_search import reachable_components, search
 from ..voronoi import distance_sq, voronoi
 
 # Squared site separation must exceed this as well: adjacent and diagonal
@@ -107,7 +107,11 @@ def connect_pieces(
 ) -> tuple[np.ndarray, dict]:
     """Make the skeleton one connected piece per free region.
 
-    In each 8-connected region of `safe`: drop pieces smaller than
+    Pieces and regions are labeled by `reachable_components` with the exact
+    move rule the searches use (regions: 4-connected; skeleton pieces:
+    diagonal steps allowed where both corner cells are safe), so every
+    piece of a region can actually be bridged and then traversed.
+    In each region of `safe`: drop pieces smaller than
     `min_piece_px` (unless it is the region's only piece), then grow a tree
     from the largest piece, repeatedly adding the shortest safe path from the
     tree to the nearest remaining piece (multi-source Dijkstra). With
@@ -127,10 +131,10 @@ def connect_pieces(
     out = skeleton.copy()
     stats = {"n_pruned": 0, "n_bridges": 0, "bridge_px": 0,
              "bridges": np.zeros_like(skeleton, dtype=bool)}
-    pieces, n_pieces = label(skeleton, structure=_EIGHT)
+    pieces, n_pieces = reachable_components(skeleton, corner_ok=safe)
     if n_pieces <= 1:
         return out, stats
-    regions, _ = label(safe, structure=_EIGHT)
+    regions, _ = reachable_components(safe)
     size = np.bincount(pieces.ravel(), minlength=n_pieces + 1)
     region_of = np.zeros(n_pieces + 1, dtype=np.int64)
     region_of[pieces[skeleton]] = regions[skeleton]

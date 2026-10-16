@@ -33,6 +33,7 @@ from scipy.ndimage import label
 from bench_jfa import machine_info
 from voronav.config import Q2Config, load_q2_config, to_dict
 from voronav.map_sources import expand_all, two_rooms
+from voronav.planning.grid_search import REACHABILITY
 from voronav.planning import (
     astar_plan,
     build_roadmap,
@@ -44,7 +45,6 @@ from voronav.planning import (
     weighted_astar_plan,
 )
 
-_EIGHT = np.ones((3, 3), dtype=bool)
 METRIC_KEYS = ("length_px", "min_clearance_px", "mean_clearance_px", "p10_clearance_px",
                "total_turn_deg", "collision_free", "n_waypoints")
 
@@ -52,9 +52,10 @@ METRIC_KEYS = ("length_px", "min_clearance_px", "mean_clearance_px", "p10_cleara
 def sample_queries(safe: np.ndarray, n: int, min_dist: float, rng: np.random.Generator,
                    max_tries: int | None = None) -> list[tuple[tuple[int, int], tuple[int, int]]]:
     """Up to n (start, goal) pairs: start uniform over safe pixels, goal
-    uniform over pixels of the start's 8-connected safe region that are at
+    uniform over pixels of the start's reachable safe region (4-connected:
+    see grid_search.REACHABILITY) that are at
     least `min_dist` away. Fewer than n when the map has no room for them."""
-    regions, _ = label(safe, structure=_EIGHT)
+    regions, _ = label(safe, structure=REACHABILITY)
     free = np.argwhere(safe)
     if len(free) == 0:
         return []

@@ -3,6 +3,8 @@ maximum-clearance path is known exactly, so "Voronoi trades length for
 clearance" is checked against ground truth rather than eyeballed."""
 
 import numpy as np
+
+from voronav.planning.grid_search import REACHABILITY
 import pytest
 from scipy.ndimage import label
 
@@ -46,7 +48,7 @@ def test_corridor_end_to_end():
 
 
 def _queries(rm, n, seed):
-    regions, _ = label(rm.safe, structure=EIGHT)
+    regions, _ = label(rm.safe, structure=REACHABILITY)
     rng = np.random.default_rng(seed)
     pix = np.argwhere(regions == np.bincount(regions.ravel())[1:].argmax() + 1)
     return [(tuple(pix[i]), tuple(pix[j])) for i, j in rng.integers(len(pix), size=(n, 2))]

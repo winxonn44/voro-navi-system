@@ -26,7 +26,7 @@ studied only as the high-dimensional Voronoi chapter (Q5).
 | # | Question | Status |
 | --- | --- | --- |
 | Q1 | How does parallel JFA scale across backends, threads and grid size, and how much error does each variant leave? | **results in** (below); GPU and scheduling causes measured and fixed |
-| Q2 | Voronoi roadmap vs grid A* vs RRT*: clearance, length, time, success | **planners built** (week 3, below); benchmark sweep is week 4 |
+| Q2 | Voronoi roadmap vs grid A* vs RRT*: clearance, length, time, success | **answered** (below): safer than A* in 99% of queries; ties tuned weighted A* on clearance, wins on query speed |
 | Q3 | How does segmentation error carry through to path safety? | planned (week 5) |
 | Q4 | SAM variants on-device: latency vs mask quality vs path quality | planned (week 6) |
 | Q5 | High-dimensional Voronoi (k-means IVF) for place recognition: recall vs dimension | stretch (week 7) |
@@ -119,7 +119,108 @@ choice made in Q2 by whether the residual error changes paths.
 Caveats: one seed, one machine, and laptop timings are sensitive to thermal
 throttling and background load.
 
-## Week 3: roadmap and planners (built, not yet benchmarked)
+## Q2 results: Voronoi roadmap vs A*, weighted A* and RRT*
+
+`configs/bench_q2.yaml` as committed: **94 maps** (20 random-obstacle maps at
+128²–1024², a corridor, 3 two-room maps, 50 MovingAI maps in 5 sets, 20
+HouseExpo houses), up to 50 seeded start/goal pairs per map, robot radius 2 px.
+Every planner ran the same **4,100 queries**: 58,220 planner runs in 17
+minutes on the M4 MacBook Air. All successful paths from every planner passed
+the independent collision check (exact EDT), with **zero failures**. Grid A*,
+weighted A* and every Voronoi variant solved 4,100 of 4,100; RRT* (3,000
+iterations, every 5th query) solved 656 of 820. Raw data:
+`docs/runs/q2_results.jsonl.gz` (`gunzip -k` to use); all tables: [`docs/q2/q2_summary.md`](docs/q2/q2_summary.md).
+
+![Clearance vs detour](docs/q2/q2_tradeoff.png)
+
+| planner (raw paths) | length / A* (median) | mean clearance | min clearance | median query |
+| --- | --- | --- | --- | --- |
+| Grid A* | 1.00 | 16.6 px | 2.93 px | 1.08 ms |
+| Weighted A*, λ = 16 | 1.07 | 24.6 px | 6.98 px | 4.26 ms |
+| Weighted A*, λ = 64 | 1.11 | 26.5 px | 7.29 px | 5.18 ms |
+| **Voronoi, `nearest`** (original) | 1.25 | 28.1 px | 6.60 px | **0.66 ms** |
+| Voronoi, `nearest-road16` | 1.27 | 28.8 px | 6.92 px | 0.89 ms |
+| **Voronoi, `best64`** (joint join, weighted roadmap) | 1.18 | 28.2 px | 7.19 px | 3.63 ms |
+| RRT* (pure Python, 656 solved) | 0.96 | 20.8 px | 3.31 px | 184 ms |
+
+**Against grid A\*, the claim holds.** On the same queries, the original
+Voronoi planner's minimum clearance was at least A*'s in **99%** of queries,
+mean clearance was 11.5 px higher (+69%), and paths were 25% longer. Queries
+were 1.6× faster once the roadmap was built. The build pays for itself after
+about 120 queries per map:
+
+![Amortized time](docs/q2/q2_amortized.png)
+
+**Against a tuned clearance-weighted A\*, clearance is a tie, and speed is
+the difference.** Weighted A* traces a smooth curve of length against
+clearance, and the Voronoi variants sit at its high-clearance end. Paired by
+query, `best64` against λ = 64:
+
+- minimum clearance equal or higher in **95%** of queries (median difference
+  exactly 0), mean clearance +1.7 px, paths 5.7% longer, queries 1.7× faster;
+- the speedup grows with map size (2.4–2.7× on random 512²–1024²) and
+  *reverses* on small maps (0.7× on HouseExpo houses, which average 311 px),
+  where the three-layer joint join costs more than it saves;
+- `nearest-road16` against λ = 16 trades the other way: 3.8× faster and
+  +4.1 px mean clearance, but 16.5% longer.
+
+So the honest headline is: **Voronoi roadmaps match the safety of a tuned
+weighted A\*, and are faster per query on large maps once built.** It is not
+that they are uniquely safe.
+
+**Where Voronoi loses:**
+
+1. **Rare but large minimum-clearance losses.** In 72 of 4,100 queries, `best64`'s
+   narrowest point was more than 2 px tighter than weighted A*'s (worst
+   16 px), concentrated on street maps, HouseExpo and Baldur's Gate. That's
+   why its *average* minimum (7.19 px) trails λ = 64 (7.29 px) despite the
+   95% tie-or-win rate. The cause has not been diagnosed yet.
+2. **Narrow-passage maps** (supplement, below): 1.8–2.4× longer paths on room
+   maps for about 1 px more clearance.
+3. **Build cost on fragmented skeletons:** Baldur's Gate maps average 62
+   bridges and 220 ms to build, against 10–100 ms elsewhere at similar size.
+
+**Smoothing** (applied identically to every planner, never lowering the
+minimum clearance) closes most of the length gap. Smoothed `best64` is 1.13×
+A* length against 1.10× for smoothed λ = 64 weighted A*, with clearances
+unchanged.
+
+### Supplement: narrow-passage maps (robot radius 1 px)
+
+At radius 2 px, all 10 MovingAI *room* maps and 2 of the *maze* maps
+produced **no queries**: their 1–2 px doors and corridors are closed to a
+radius-2 robot, so no start/goal pair lies in one reachable region. The
+harness logged this, but the first summary silently dropped those maps, so
+they are reported here as a separate condition (`configs/bench_q2_narrow.yaml`;
+20 maps, 1,000 queries, 14,200 runs, zero collisions; raw data
+`docs/runs/q2_narrow_results.jsonl.gz`;
+[`docs/q2/q2_narrow_summary.md`](docs/q2/q2_narrow_summary.md)):
+
+| set | Voronoi `nearest` vs A*: length | mean clearance gain | `best64` vs λ = 64 weighted A*: length | speedup |
+| --- | --- | --- | --- | --- |
+| maze (10) | 1.24× | +3.6 px | 1.02× | 1.9× |
+| room (10) | **2.02×** | +3.2 px | **1.89×** | 4.1× |
+
+Room maps are Voronoi's worst case. Every 1 px door limits all planners to
+the same minimum clearance, so the skeleton's detours through room centers
+buy almost nothing. The repair is also expensive here: the 8-room maps need
+about 2,950 bridges and 25 s to build, because `connect_pieces` runs one
+search per bridge. RRT* solved 1 of 200 queries in these maps, the known
+failure of sampling planners in narrow passages.
+
+### Caught by a fail-loud check
+
+The first full run crashed on MovingAI `dao/lak303d` with "skeleton piece
+unreachable inside its own region", an assertion in the roadmap repair. Free
+regions had been labeled with 8-connectivity, but searches may not cut
+corners, so two areas touching only at a corner are not mutually reachable:
+that map has 4 regions under 8-connectivity but 24 reachable ones. Regions
+and skeleton pieces are now labeled by `reachable_components`, using the
+search's exact move rule, and a regression test covers the diagonal pinch.
+The query sampler had the same mismatch and was fixed too. The run was
+restarted from scratch, so no reported number mixes old and new code.
+
+## Week 3: roadmap and planners
 
 ![Planners on example maps](docs/q2/q2_example.png)
 
@@ -133,10 +234,9 @@ throttling and background load.
   its timing.
 - **Metrics** use SciPy's exact distance transform, independent of the
   JFA field the roadmap was built on, so the planner doesn't grade its own work.
-- **First look (not a result):** on 15 random queries over 4 maps (robot
-  radius 2 px), Voronoi paths averaged 21.6 px mean clearance against 13.9 for
-  A*, and were about 24% longer. The real comparison, on MovingAI and HouseExpo
-  maps, is week 4.
+- **First look:** on 15 random queries over 4 maps (robot radius 2 px),
+  Voronoi paths averaged 21.6 px mean clearance against 13.9 for A*, and were
+  about 24% longer. The full comparison is in Q2 results, above.
 
 Three design problems were caught while building this, and all are kept as tests:
 
@@ -206,12 +306,18 @@ src/voronav/
   planning/
     roadmap.py         GVD extraction, frame-aware obstacle labels, piece bridging
     grid_search.py     Numba A* / multi-source Dijkstra, 8-connected, no corner cutting
-    planners.py        Voronoi roadmap, grid A*, RRT* (baseline)
+    planners.py        Voronoi roadmap (join / roadmap-weight variants), grid A*,
+                       clearance-weighted A*, RRT* (baseline)
+    smoothing.py       line-of-sight shortcutting, applied equally to every planner
     metrics.py         length / clearance / smoothness against the exact EDT
+  map_sources.py       Q2 map registry: synthetic generators + MovingAI / image / HouseExpo dirs
 configs/               debug.yaml (seconds), bench_quick.yaml (~10 s),
-                       bench_q1.yaml (full Q1 sweep, heavy)
+                       bench_q1.yaml (full Q1 sweep, heavy), bench_q2_quick.yaml,
+                       bench_q2.yaml (full Q2 study), bench_q2_narrow.yaml
 scripts/               bench_jfa.py (harness -> JSONL), plot_q1.py (figures),
-                       probe_mps.py (why eager MPS was slow), plan_demo.py (Q2 figure)
+                       probe_mps.py (why eager MPS was slow), plan_demo.py (Q2 figure),
+                       fetch_maps.py (benchmark maps, see docs/DATA.md),
+                       bench_plan.py / plot_q2.py / summarize_q2.py (Q2 study)
 tests/                 property, cross-backend, loader, config, end-to-end
 ```
 
@@ -219,7 +325,7 @@ tests/                 property, cross-backend, loader, config, end-to-end
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -e ".[dev,torch]"
-.venv/bin/python -m pytest -q                                          # ~5 s
+.venv/bin/python -m pytest -q                                          # ~9 s
 .venv/bin/python scripts/bench_jfa.py --config configs/bench_quick.yaml # ~10 s, light
 .venv/bin/python scripts/plan_demo.py --out docs/q2                     # ~2 s
 ```
@@ -233,9 +339,19 @@ pauses 2 s between rows to limit thermal-throttling bias:
 .venv/bin/python scripts/plot_q1.py runs/bench_q1/results.jsonl --out docs/q1
 ```
 
+The Q2 study needs the benchmark maps (`scripts/fetch_maps.py`, about 64 MB;
+see `docs/DATA.md`). The main sweep takes about 17 minutes and the
+narrow-passage supplement about 8, mostly single-core:
+
+```bash
+.venv/bin/python scripts/bench_plan.py --config configs/bench_q2.yaml
+.venv/bin/python scripts/plot_q2.py runs/bench_q2/results.jsonl --out docs/q2
+.venv/bin/python scripts/summarize_q2.py runs/bench_q2/results.jsonl > docs/q2/q2_summary.md
+```
+
 ## Testing
 
-149 tests run in about 5 s on a laptop with no downloads. Every property test
+214 tests run in about 9 s on a laptop with no downloads. Every property test
 runs on every available backend (NumPy, Numba, PyTorch CPU, and MPS or CUDA
 when present).
 
