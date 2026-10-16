@@ -1,4 +1,4 @@
-"""Map source registry for the Q2 planner benchmark.
+"""Map source registry for the Q2 and Q3 planner benchmarks.
 
 A *source spec* (`MapSourceConfig`, from YAML) expands into one or more named
 occupancy grids:
@@ -7,6 +7,8 @@ occupancy grids:
     random_obstacles  random rectangles and discs (`n_shapes`, `sizes`, `seeds`)
     corridor          straight corridor of width `gap`; deterministic
     two_rooms         two rooms joined by a door, with furniture; deterministic
+    cluttered_room    four rooms with thick walls and doors, cluttered with
+                      thin obstacles (chair legs, poles, railings; `seeds`)
   directory, one map per matching file (sorted, up to `max_maps`):
     movingai_dir      every *.map file in `dir`, via maps.load_movingai
     image_dir         every *.png file in `dir`, via maps.load_image_mask
@@ -58,6 +60,77 @@ def two_rooms(height: int = 120, width: int = 200) -> np.ndarray:
     return occ
 
 
+def cluttered_room(size: int = 256, seed: int = 0) -> np.ndarray:
+    """A 2 x 2 grid of rooms (walls and frame >= 6 px thick, one door in each
+    inner wall) cluttered with obstacles 1-4 px thin: table and chair legs
+    (1-2 px dots), poles (2-4 px squares) and railings (1-2 px lines, some
+    with posts). Built for Q3, where segmentation can erase thin obstacles
+    (`thin_obstacle_miss`): walls survive that, the clutter is what vanishes.
+    Clutter can stand against walls but keeps clear of the doors."""
+    if size < 96:
+        raise ValueError("cluttered_room needs size >= 96")
+    rng = np.random.default_rng(seed)
+    h = w = size
+    wall = max(6, size // 40)
+    occ = np.zeros((h, w), dtype=bool)
+    occ[:wall], occ[-wall:], occ[:, :wall], occ[:, -wall:] = True, True, True, True
+    my, mx = h // 2, w // 2
+    occ[my - wall // 2 : my - wall // 2 + wall] = True
+    occ[:, mx - wall // 2 : mx - wall // 2 + wall] = True
+    door = max(10, size // 12)
+    keep_free = np.zeros_like(occ)  # doors plus the approach to them
+    for lo, hi in ((wall, mx - wall // 2), (mx - wall // 2 + wall, w - wall)):  # horizontal wall
+        c = int(rng.integers(lo + door, hi - 2 * door))
+        occ[my - wall // 2 : my - wall // 2 + wall, c : c + door] = False
+        keep_free[my - wall - door : my + wall + door, c - door // 2 : c + door + door // 2] = True
+    for lo, hi in ((wall, my - wall // 2), (my - wall // 2 + wall, h - wall)):  # vertical wall
+        c = int(rng.integers(lo + door, hi - 2 * door))
+        occ[c : c + door, mx - wall // 2 : mx - wall // 2 + wall] = False
+        keep_free[c - door // 2 : c + door + door // 2, mx - wall - door : mx + wall + door] = True
+    clutter = np.zeros_like(occ)
+    margin = wall + 1  # clutter may stand against the walls, like real furniture
+
+    def dot(y, x, s):
+        clutter[y : y + s, x : x + s] = True
+
+    rooms = [(y0, y1, x0, x1) for y0, y1 in ((0, my), (my, h)) for x0, x1 in ((0, mx), (mx, w))]
+    scale = size / 256
+    for ri, (y0, y1, x0, x1) in enumerate(rooms):
+        ry0, ry1, rx0, rx1 = y0 + margin, y1 - margin, x0 + margin, x1 - margin
+
+        def at(sh, sw):  # random top-left corner for an item of extent sh x sw
+            return (int(rng.integers(ry0, max(ry0 + 1, ry1 - sh))),
+                    int(rng.integers(rx0, max(rx0 + 1, rx1 - sw))))
+
+        for _ in range(max(1, round(2 * scale))):  # table: 4 legs at the corners
+            th, tw = int(rng.integers(12, 22)), int(rng.integers(16, 30))
+            y, x = at(th, tw)
+            s = int(rng.integers(1, 3))
+            for dy, dx in ((0, 0), (0, tw - s), (th - s, 0), (th - s, tw - s)):
+                dot(y + dy, x + dx, s)
+        for _ in range(max(2, round(5 * scale))):  # chairs: 4 legs, 6-9 px apart
+            c = int(rng.integers(6, 10))
+            y, x = at(c, c)
+            for dy, dx in ((0, 0), (0, c - 1), (c - 1, 0), (c - 1, c - 1)):
+                dot(y + dy, x + dx, 1)
+        for _ in range(max(2, round(4 * scale))):  # poles
+            s = int(rng.integers(2, 5))
+            dot(*at(s, s), s)
+        if ri % 2 == 0:  # railing across part of the room, posts every 8 px on some
+            t = int(rng.integers(1, 3))
+            length = int(rng.integers((rx1 - rx0) * 2 // 5, (rx1 - rx0) * 3 // 5))
+            if rng.random() < 0.5:
+                y, x = at(t, length)
+                clutter[y : y + t, x : x + length] = True
+                if rng.random() < 0.5:
+                    for px in range(x, x + length, 8):
+                        dot(y - 1, px, t + 2)
+            else:
+                y, x = at(length, t)
+                clutter[y : y + length, x : x + t] = True
+    return occ | (clutter & ~keep_free)
+
+
 # kind -> (generator(size, seed, spec) -> occ, uses seeds, required spec fields)
 SYNTHETIC: dict[str, tuple[Callable, bool, tuple[str, ...]]] = {
     "random_obstacles": (
@@ -66,6 +139,7 @@ SYNTHETIC: dict[str, tuple[Callable, bool, tuple[str, ...]]] = {
     "corridor": (lambda size, seed, spec: _maps.corridor(size, size, spec.gap), False, ("gap",)),
     # 3:5 aspect like the demo map, so the door sits between two wide rooms
     "two_rooms": (lambda size, seed, spec: two_rooms(size, round(size * 5 / 3)), False, ()),
+    "cluttered_room": (lambda size, seed, spec: cluttered_room(size, seed), True, ()),
 }
 
 # kind -> (glob pattern, loader(path) -> occ)

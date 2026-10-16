@@ -1,0 +1,25 @@
+# Tiny Q3 config: both parts of the harness in a few seconds. Used by the
+# smoke test.
+q3:
+  maps:
+    - {kind: random_obstacles, sizes: [64], seeds: [0], n_shapes: 6}
+    - {kind: cluttered_room, sizes: [96], seeds: [0]}
+  queries_per_map: 3
+  planners: [voronoi, astar, weighted_astar]
+  lambdas: [16]
+  voronoi_variants:
+    - {name: nearest}
+    - {name: best64, join: best, join_lam: 64, roadmap_lam: 64}
+  corruptions:
+    boundary_shift: [-1, 0, 2]
+    thin_obstacle_miss: [0, 4]
+  out_dir: runs/debug_q3
+  frames:
+    maps:
+      - {kind: cluttered_room, sizes: [96], seeds: [1]}
+    queries_per_map: 2
+    n_frames: 4
+    p_bad: [0, 0.5]
+    base: [boundary_noise, 0.5]
+    bad: [[thin_obstacle_miss, 4]]
+    window: 3

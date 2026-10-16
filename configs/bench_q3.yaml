@@ -1,0 +1,59 @@
+# Q3 study: how segmentation error carries through to path safety. Corrupt
+# the true map, plan on the corrupted map, grade the path on the true map.
+# Light subset of the Q2 maps plus cluttered_room (thin obstacles for
+# thin_obstacle_miss to erase). Target: <= 20 min on a fanless M4 MacBook
+# Air (estimated ~15 min: Part A ~4, Part B ~11); run plugged in.
+#   python scripts/bench_q3.py --config configs/bench_q3.yaml
+# Directory sources fail loudly if their folder is missing or empty: fetch
+# the maps first (scripts/fetch_maps.py, docs/DATA.md) or drop the entry.
+roadmap:
+  backend: numba
+  variant: jfa+2
+  bridge_lam: 64  # as in Q2 (docs/Q2_HARNESS.md)
+
+q3:
+  maps:
+    - {kind: random_obstacles, sizes: [256], seeds: [0, 1, 2], n_shapes: 25}
+    - {kind: two_rooms, sizes: [240]}
+    - {kind: cluttered_room, sizes: [256], seeds: [0, 1, 2]}
+    - {kind: houseexpo_dir, dir: data/raw/houseexpo, max_maps: 6}
+    - {kind: movingai_dir, dir: data/raw/movingai/street, max_maps: 2}
+    - {kind: movingai_dir, dir: data/raw/movingai/dao, max_maps: 2}
+    - {kind: movingai_dir, dir: data/raw/movingai/bg512, max_maps: 2}
+  queries_per_map: 20
+  min_dist_frac: 0.333
+  seed: 0
+  robot_radius: 2.0
+  planners: [voronoi, astar, weighted_astar]
+  lambdas: [16, 64]
+  voronoi_variants:  # the Q2 original planner and its best variant
+    - {name: nearest}
+    - {name: best64, join: best, join_lam: 64, roadmap_lam: 64}
+  # level 0 is the control: no corruption
+  corruptions:
+    boundary_shift: [-3, -2, -1, 0, 1, 2, 3, 4]   # px; > 0 = floor grows into walls (dangerous)
+    region_dropout: [0, 0.1, 0.2, 0.3, 0.5]       # fraction of floor removed in blobs
+    thin_obstacle_miss: [0, 2, 4, 6]              # obstacles thinner than this (px) vanish
+    boundary_noise: [0, 1, 2, 3]                  # amplitude (px)
+  draws: 1
+  cooldown_s: 2.0
+  out_dir: runs/bench_q3
+  frames:  # Part B: bad frames in a stream, raw vs temporal_filter
+    # 10 maps x 5 queries; ~11 min by scaling the quick run's ~16 ms per
+    # frame (3 queries x 5 planners, 128 px) to 256 px and 5 queries
+    maps:
+      - {kind: cluttered_room, sizes: [256], seeds: [3, 4, 5]}
+      - {kind: random_obstacles, sizes: [256], seeds: [3, 4], n_shapes: 25}
+      - {kind: two_rooms, sizes: [120]}
+      - {kind: houseexpo_dir, dir: data/raw/houseexpo, max_maps: 4}
+    queries_per_map: 5
+    n_frames: 20
+    p_bad: [0, 0.05, 0.1, 0.2, 0.4]
+    base: [boundary_noise, 0.5]  # every frame: mild noise, calibrated to 0 collisions at p_bad = 0 (amplitude 1 already collided on 5-15% of plans)
+    bad:                        # a bad frame is one of these (each its own sequences)
+      - [thin_obstacle_miss, 4]
+      - [boundary_shift, 3]
+      - [region_dropout, 0.4]
+    window: 5
+    outlier_iou: 0.8
+    patience: 3

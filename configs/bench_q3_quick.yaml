@@ -1,0 +1,47 @@
+# Everyday Q3 check: synthetic maps only, light load (about a minute on a
+# fanless laptop). Not the study: few maps, queries and frames. The study is
+# bench_q3.yaml.
+#   python scripts/bench_q3.py --config configs/bench_q3_quick.yaml
+roadmap:
+  backend: numba
+  variant: jfa+2
+  bridge_lam: 64  # as in Q2 (docs/Q2_HARNESS.md)
+
+q3:
+  maps:
+    - {kind: random_obstacles, sizes: [256], seeds: [0, 1], n_shapes: 25}
+    - {kind: two_rooms, sizes: [120]}
+    - {kind: cluttered_room, sizes: [256], seeds: [0, 1]}
+  queries_per_map: 10
+  min_dist_frac: 0.333
+  seed: 0
+  robot_radius: 2.0
+  planners: [voronoi, astar, weighted_astar]
+  lambdas: [16, 64]
+  voronoi_variants:  # the Q2 original planner and its best variant
+    - {name: nearest}
+    - {name: best64, join: best, join_lam: 64, roadmap_lam: 64}
+  # level 0 is the control: no corruption
+  corruptions:
+    boundary_shift: [-3, -2, -1, 0, 1, 2, 3, 4]   # px; > 0 = floor grows into walls (dangerous)
+    region_dropout: [0, 0.1, 0.2, 0.3, 0.5]       # fraction of floor removed in blobs
+    thin_obstacle_miss: [0, 2, 4, 6]              # obstacles thinner than this (px) vanish
+    boundary_noise: [0, 1, 2, 3]                  # amplitude (px)
+  draws: 1
+  cooldown_s: 0.5
+  out_dir: runs/bench_q3_quick
+  frames:  # Part B: bad frames in a stream, raw vs temporal_filter
+    maps:
+      - {kind: cluttered_room, sizes: [128], seeds: [1]}
+      - {kind: random_obstacles, sizes: [128], seeds: [1], n_shapes: 12}
+    queries_per_map: 3
+    n_frames: 12
+    p_bad: [0, 0.05, 0.1, 0.2, 0.4]
+    base: [boundary_noise, 0.5]  # every frame: mild noise, calibrated to 0 collisions at p_bad = 0 (amplitude 1 already collided on 5-15% of plans)
+    bad:                        # a bad frame is one of these (each its own sequences)
+      - [thin_obstacle_miss, 4]
+      - [boundary_shift, 3]
+      - [region_dropout, 0.4]
+    window: 5
+    outlier_iou: 0.8
+    patience: 3

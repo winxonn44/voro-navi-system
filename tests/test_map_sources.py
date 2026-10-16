@@ -88,3 +88,34 @@ def test_duplicate_names_rejected():
 
 def test_registry_lists_every_kind():
     assert set(KINDS) >= {"random_obstacles", "corridor", "two_rooms", "movingai_dir", "image_dir"}
+
+
+@pytest.mark.parametrize("seed", [0, 1, 2])
+def test_cluttered_room_has_thin_obstacles(seed):
+    from scipy.ndimage import binary_opening
+
+    from voronav.map_sources import cluttered_room
+    from voronav.planning import build_roadmap
+    from voronav.planning.grid_search import reachable_components
+
+    occ = cluttered_room(256, seed)
+    assert occ.dtype == bool and occ.shape == (256, 256)
+    assert np.array_equal(occ, cluttered_room(256, seed))  # seeded
+    # opening with a 5 x 5 square deletes everything at most 4 px thin
+    lab, n = label(occ, structure=np.ones((3, 3), dtype=bool))
+    opened = binary_opening(occ, np.ones((5, 5), dtype=bool))
+    thin = [i for i in range(1, n + 1) if not opened[lab == i].any()]
+    assert len(thin) >= 50  # chair legs, poles, railings
+    walls = np.bincount(lab.ravel())[1:].argmax() + 1
+    assert walls not in thin  # the walls are thick and survive
+    # a long thin component: a railing
+    assert any((lab == i).sum() >= 30 for i in thin)
+    # the robot (radius 2) can reach every room: one search region
+    _, regions = reachable_components(build_roadmap(occ, robot_radius=2.0).safe)
+    assert regions == 1
+
+
+def test_cluttered_room_is_a_seeded_kind():
+    maps = list(expand(MapSourceConfig("cluttered_room", sizes=[128], seeds=[0, 1])))
+    assert [m.name for m in maps] == ["cluttered_room-128-s0", "cluttered_room-128-s1"]
+    assert not np.array_equal(maps[0].occ, maps[1].occ)
