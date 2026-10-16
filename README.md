@@ -27,7 +27,7 @@ studied only as the high-dimensional Voronoi chapter (Q5).
 | --- | --- | --- |
 | Q1 | How does parallel JFA scale across backends, threads and grid size, and how much error does each variant leave? | **results in** (below); GPU and scheduling causes measured and fixed |
 | Q2 | Voronoi roadmap vs grid A* vs RRT*: clearance, length, time, success | **answered** (below): safer than A* in 99.5% of queries; ties tuned weighted A* on clearance, wins on query speed |
-| Q3 | How does segmentation error carry through to path safety? | planned (week 5) |
+| Q3 | How does segmentation error carry through to path safety? | **answered** (below): clearance roughly halves collisions from wall errors, does nothing for missed clutter; a temporal vote fixes isolated bad frames |
 | Q4 | SAM variants on-device: latency vs mask quality vs path quality | planned (week 6) |
 | Q5 | High-dimensional Voronoi (k-means IVF) for place recognition: recall vs dimension | stretch (week 7) |
 
@@ -241,6 +241,124 @@ search's exact move rule, and a regression test covers the diagonal pinch.
 The query sampler had the same mismatch and was fixed too. The run was
 restarted from scratch, so no reported number mixes old and new code.
 
+## Q3 results: what segmentation errors do to path safety
+
+A robot plans on its segmentation mask but collides with the real world. So
+each true map is corrupted the way a segmentation model gets it wrong, every
+planner plans on the corrupted map, and the path is graded on the **true**
+map (exact EDT). Four error models (`src/voronav/corruption.py`,
+[`docs/Q3_ERRORS.md`](docs/Q3_ERRORS.md)), chosen from real SAM failure modes:
+
+| model | SAM failure | level |
+| --- | --- | --- |
+| `boundary_shift` | floor mask bleeds into walls (> 0) or shrinks away from them (< 0) | px |
+| `region_dropout` | clipping, or "part instead of whole": chunks of floor missing | fraction of floor |
+| `thin_obstacle_miss` | fine detail merged into the floor: chair legs, poles, railings vanish | width threshold, px |
+| `boundary_noise` | ragged, spatially correlated edge error | amplitude, px |
+
+`configs/bench_q3.yaml`: 19 maps (random obstacles, two rooms, 6 HouseExpo
+houses, 6 MovingAI maps, and 3 `cluttered_room` maps full of 1–4 px legs and
+poles), 20 queries each, robot radius 2 px, 39,900 planner runs. Part B
+(below) adds 150,000 per-frame plans. 11 minutes on the M4 MacBook Air. Raw
+data: `docs/runs/q3_results.jsonl.gz`; all tables:
+[`docs/q3/q3_summary.md`](docs/q3/q3_summary.md). Every level-0 control
+had 0 collisions and 0 strandings.
+
+![Collision rate vs error level](docs/q3/q3_collision.png)
+
+Collision % (the path enters a true obstacle). Structural = every map except
+`cluttered_room`:
+
+| error | A* | weighted A* λ=64 | Voronoi `nearest` | Voronoi `best64` |
+| --- | --- | --- | --- | --- |
+| structural, floor leaks 1 px | 30 | 18 | 20 | 19 |
+| structural, floor leaks 2 px (= robot radius) | **78** | **36** | 43 | **40** |
+| structural, noise 2 px | 42 | 12 | 25 | 17 |
+| cluttered, legs ≤ 4 px missed | **30** | 45 | 35 | 38 |
+| cluttered, legs ≤ 6 px missed | **37** | 58 | 65 | 62 |
+| any map, floor shrinks or chunks drop out | 0 | 0 | 0 | 0 |
+
+**1. Errors that shrink the floor fail safe.** Shrinking the floor and dropping
+out regions (the user's "clipping" and "part instead of whole") caused zero
+collisions at every level on every map. They strand the robot instead: up to
+38% of queries at −3 px and 96–98% at 50% dropout, mostly because an endpoint
+no longer looks safe.
+
+**2. Against wall errors, clearance pays: it roughly halves collisions.** When
+the floor leaks 2 px into the walls, plain A* collides on 78% of structural
+queries, against 36–40% for weighted A* and Voronoi `best64`. Boundary noise
+shows the same order. The original Voronoi `nearest` is in between, because
+its legs onto and off the roadmap are shortest paths that hug walls. That's
+the Q2 refinement paying off under error.
+
+**3. Against missed clutter, clearance does not help. It slightly hurts.** On
+`cluttered_room`, when legs and poles vanish from the mask, A* collides
+*least* (30–37%), and the clearance-seeking planners collide most (45–65%).
+They route through the middle of rooms, which is exactly where the erased
+furniture stands. Clearance from the walls says nothing about an obstacle
+the map no longer contains.
+
+**4. On real maps, a 1 px leak breaches thin walls.** Synthetic maps with
+thick walls had 0 collisions at +1 px. HouseExpo and MovingAI had 25–32%,
+for every planner. A 2 px wall that loses 1 px from each side disappears, so
+it opens a gap that looks like a doorway (up to 11 per house; 77 on MovingAI
+`brc505d`, which also loses 93 small obstacles entirely). Planners route
+through the fake doorways. This is also why even small leaks matter on real
+floor plans.
+
+### Part B: a few bad frames vs a bad stream
+
+The user's requirement for video: a few bad frames are acceptable, a bad
+stream is not. Each sequence has 20 frames with mild noise. Each frame is
+independently a "bad" frame (one severe error) with probability *p*, and
+the planner plans on every frame, either raw or after
+`temporal.temporal_filter`: an IoU outlier gate, then a majority vote over
+the last 5 accepted masks.
+
+![Bad frames, raw vs filtered](docs/q3/q3_frames.png)
+
+| bad frames are… | p = 0.1 | p = 0.2 | p = 0.4 |
+| --- | --- | --- | --- |
+| floor leaks 3 px: collisions, raw → filtered | 7% → 1% | **14% → 4%** | 30% → 25% |
+| 40% dropout: stranded, raw → filtered | 14% → 4% | **26% → 7%** | 35% → 14% |
+| legs ≤ 4 px missed: collisions, raw → filtered | 1% → 0% | 1% → 0% | 3% → 3% |
+
+**The vote works while bad frames are a minority.** It cuts collisions about
+3.5× and strandings about 3.7× at p = 0.2, and it stops helping at p = 0.4,
+when bad frames often hold the majority of the window. That matches the
+requirement: isolated bad frames are absorbed, while a sustained failure
+shows through.
+
+**The outlier gate is blind to the dangerous errors:**
+
+| bad frames are… | gate recall | gate precision |
+| --- | --- | --- |
+| 40% floor dropout | **91%** | 89% |
+| floor leaks 3 px | **0%** | – |
+| legs ≤ 4 px missed | **0%** | – |
+
+The gate compares each mask's free-space IoU with the last accepted mask. A
+3 px leak changes IoU too little to trip it (a median of about 0.88 in the quick run, against a 0.8
+threshold), and erasing legs changes it almost not at all (bad frames even
+score slightly *higher* than good ones). So the gate catches only the
+fail-safe error, and every bit of protection against the dangerous errors
+comes from the vote. The missed-clutter rows are too rare to judge: only
+1–3% of frames collided even before filtering.
+
+### What Q3 means for the vision pipeline (Q4)
+
+- **Prefer masks that err on the side of shrinking.** Shrinking fails safe,
+  and leaking does not. Erode the floor mask a little, or prompt
+  conservatively.
+- **Clearance planning is the right defense against wall errors.** It needs
+  `best64` or weighted A*, not the original `nearest` planner.
+- **Thin obstacles need a separate safeguard:** a separate obstacle prompt, a
+  lower bound on obstacle size, or a second sensor. Neither clearance nor the
+  IoU gate can see them.
+- **Keep the temporal vote,** and replace the IoU gate with a check that is
+  sensitive to *added* floor (for example, the count of newly free pixels
+  near the previous boundary). That improvement is measurable in Q4.
+
 ## Week 3: roadmap and planners
 
 ![Planners on example maps](docs/q2/q2_example.png)
@@ -331,14 +449,18 @@ src/voronav/
                        clearance-weighted A*, RRT* (baseline)
     smoothing.py       line-of-sight shortcutting, applied equally to every planner
     metrics.py         length / clearance / smoothness against the exact EDT
-  map_sources.py       Q2 map registry: synthetic generators + MovingAI / image / HouseExpo dirs
+  map_sources.py       map registry: synthetic generators (incl. cluttered_room) + MovingAI / image / HouseExpo dirs
+  corruption.py        Q3 segmentation-error models + mask error stats
+  temporal.py          Q3 bad-frame sequences + causal temporal filter
 configs/               debug.yaml (seconds), bench_quick.yaml (~10 s),
                        bench_q1.yaml (full Q1 sweep, heavy), bench_q2_quick.yaml,
-                       bench_q2.yaml (full Q2 study), bench_q2_narrow.yaml
+                       bench_q2.yaml (full Q2 study), bench_q2_narrow.yaml,
+                       bench_q3_quick.yaml, bench_q3.yaml (full Q3 study)
 scripts/               bench_jfa.py (harness -> JSONL), plot_q1.py (figures),
                        probe_mps.py (why eager MPS was slow), plan_demo.py (Q2 figure),
                        fetch_maps.py (benchmark maps, see docs/DATA.md),
-                       bench_plan.py / plot_q2.py / summarize_q2.py (Q2 study)
+                       bench_plan.py / plot_q2.py / summarize_q2.py (Q2 study),
+                       bench_q3.py / plot_q3.py / summarize_q3.py (Q3 study)
 tests/                 property, cross-backend, loader, config, end-to-end
 ```
 
@@ -346,7 +468,7 @@ tests/                 property, cross-backend, loader, config, end-to-end
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -e ".[dev,torch]"
-.venv/bin/python -m pytest -q                                          # ~9 s
+.venv/bin/python -m pytest -q                                          # ~10 s
 .venv/bin/python scripts/bench_jfa.py --config configs/bench_quick.yaml # ~10 s, light
 .venv/bin/python scripts/plan_demo.py --out docs/q2                     # ~2 s
 ```
@@ -370,9 +492,17 @@ narrow-passage supplement about 7, mostly single-core:
 .venv/bin/python scripts/summarize_q2.py runs/bench_q2/results.jsonl > docs/q2/q2_summary.md
 ```
 
+The Q3 study takes about 11 minutes:
+
+```bash
+.venv/bin/python scripts/bench_q3.py --config configs/bench_q3.yaml
+.venv/bin/python scripts/plot_q3.py runs/bench_q3/results.jsonl --out docs/q3
+.venv/bin/python scripts/summarize_q3.py runs/bench_q3/results.jsonl > docs/q3/q3_summary.md
+```
+
 ## Testing
 
-216 tests run in about 9 s on a laptop with no downloads. Every property test
+282 tests run in about 10 s on a laptop with no downloads. Every property test
 runs on every available backend (NumPy, Numba, PyTorch CPU, and MPS or CUDA
 when present).
 
