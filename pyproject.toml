@@ -12,6 +12,9 @@ dependencies = [
     "matplotlib>=3.8",
 ]
 
+[project.scripts]
+voronav = "voronav.cli:main"
+
 [project.optional-dependencies]
 torch = ["torch>=2.4"]
 # Q4 floor segmentation. SAM 2 is not on PyPI under Meta's name, so it is

@@ -19,6 +19,7 @@ from __future__ import annotations
 import contextlib
 import hashlib
 import json
+import time
 import warnings
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -342,6 +343,9 @@ class Sam2Floor:
             # decoder's multimask output, which the video predictor hides
             self.image_predictor = SAM2ImagePredictor(self.predictor)
         self.last_choices: list[dict] = []  # per prompt frame: index, scores, areas
+        # per output frame of the last segment_video: wall time (s) since the
+        # previous frame came out; frame 0's includes init_state and prompting
+        self.last_frame_s: list[float] = []
 
     @property
     def cache_tag(self) -> str:
@@ -393,6 +397,8 @@ class Sam2Floor:
         import sam2.sam2_video_predictor as svp
 
         self.last_choices = []
+        frame_s: list[float | None] = [None] * len(frames)
+        tick = time.perf_counter()
         with (torch.inference_mode(), self._autocast(), _quiet(),
               _swap(svp, "tqdm", lambda it, **_: it)):
             state = self._init_state(frames)
@@ -403,12 +409,17 @@ class Sam2Floor:
             start = min(prompts.frames)
             for idx, _, logits in self.predictor.propagate_in_video(state, start_frame_idx=start):
                 out[idx] = (logits[0, 0] > 0).cpu().numpy()
+                now = time.perf_counter()
+                frame_s[idx], tick = now - tick, now
             if start > 0:  # frames before the first prompt: track backwards
                 for idx, _, logits in self.predictor.propagate_in_video(
                     state, start_frame_idx=start, reverse=True
                 ):
                     out[idx] = (logits[0, 0] > 0).cpu().numpy()
+                    now = time.perf_counter()
+                    frame_s[idx], tick = now - tick, now
             self.predictor.reset_state(state)
+        self.last_frame_s = [float(s) for s in frame_s]
         return [erode(m, self.erode_px) for m in out]
 
     def _init_state(self, frames: Sequence[np.ndarray]) -> dict:

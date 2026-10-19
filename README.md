@@ -2,7 +2,7 @@
 
 From-scratch parallel Voronoi roadmaps for **offline, segmentation-driven
 navigation**: SAM free-space masks → generalized Voronoi diagram →
-maximum-clearance paths, running entirely on a laptop with no network.
+maximum-clearance paths, running entirely autonomously offline.
 
 The core is built without a geometry library: discrete Voronoi diagrams come
 from my own Jump Flooding Algorithm (JFA) in three backends — a readable NumPy
@@ -10,16 +10,27 @@ reference, a multithreaded Numba CPU kernel and a PyTorch GPU kernel (Apple MPS
 or CUDA) — all checked against a brute-force oracle. Every design decision is
 visible and tested.
 
-## Claim (and what it is not)
+![Offline demo: SAM 2 floor mask, bird's-eye grid, Voronoi roadmap and paths](docs/q4/demo.gif)
+
+*First-person video (TartanGround) → SAM 2 floor mask → bird's-eye grid →
+Voronoi roadmap → path, about 0.5 s per frame on an M4 MacBook Air. Blue: the Voronoi path; orange: the grid A* path.*
+
+## Claim 
 
 The project is designed to support one measurable claim:
 
 > A maximum-clearance roadmap built by a from-scratch parallel Voronoi engine
 > on top of SAM segmentation produces safer paths than grid A* at comparable
-> planning time, and runs fully offline on a laptop.
+> or faster planning time, and runs fully autonomously offline.
 
-It does **not** claim to be a full SLAM or autonomy stack. Localization is
-studied only as the high-dimensional Voronoi chapter (Q5).
+**Verdict after Q1–Q4:** supported, with caveats. On real SAM 2 masks of
+first-person video, the Voronoi planner (`best64`) collided on ≤ 0.1% of
+plans against 0.6–1.1% for grid A* (Q4). Against a tuned clearance-weighted
+A*, its safety is a tie, and its advantage is query speed on large maps
+(Q2). Segmentation, not planning, sets the frame rate: about 1.9 fps
+end to end, of which the whole Voronoi side is about 4 ms (Q4). The video is
+synthetic, so read Q4 as an upper bound on real-world accuracy.
+
 
 ## Research questions
 
@@ -28,8 +39,7 @@ studied only as the high-dimensional Voronoi chapter (Q5).
 | Q1 | How does parallel JFA scale across backends, threads and grid size, and how much error does each variant leave? | **results in** (below); GPU and scheduling causes measured and fixed |
 | Q2 | Voronoi roadmap vs grid A* vs RRT*: clearance, length, time, success | **answered** (below): safer than A* in 99.5% of queries; ties tuned weighted A* on clearance, wins on query speed |
 | Q3 | How does segmentation error carry through to path safety? | **answered** (below): clearance roughly halves collisions from wall errors, does nothing for missed clutter; a temporal vote fixes isolated bad frames |
-| Q4 | SAM variants on-device: latency vs mask quality vs path quality | planned (week 6) |
-| Q5 | High-dimensional Voronoi (k-means IVF) for place recognition: recall vs dimension | stretch (week 7) |
+| Q4 | SAM variants on-device: latency vs mask quality vs path quality | **answered** (below): SAM 2 masks fail safe; clearance planners ≤ 0.1% collisions; ~1.9 fps, segmentation-bound |
 
 ## Q1 first results (measured, Apple M4, 10 cores)
 
@@ -359,6 +369,85 @@ comes from the vote. The missed-clutter rows are too rare to judge: only
   sensitive to *added* floor (for example, the count of newly free pixels
   near the previous boundary). That improvement is measurable in Q4.
 
+## Q4 results: real SAM 2 on first-person video
+
+**Question:** is SAM 2 on first-person video accurate enough to plan on,
+and how fast does it run offline on a fanless M4 MacBook Air?
+
+**Setup:** 3 indoor sequences from TartanGround (a hospital, an abandoned
+school, an office; 150 frames each; robot camera at 0.6–1.4 m; CC BY 4.0),
+which come with ground-truth floor labels and exact camera poses. SAM 2 is
+prompted once on the first frame (positive points low on the floor, negative
+points in the upper corners) and tracks the floor with its video memory.
+Each mask goes through a flat-ground homography to a bird's-eye grid (5 cm
+cells, 5 m ahead × 8 m wide; unseen = obstacle). Planners plan on SAM's grid
+and are graded on the ground-truth grid, exactly as in Q3. Conditions: SAM
+2 tiny vs small × 2 mask-selection rules × erosion 0 or 2 px × raw frames vs
+an ego-motion-aligned temporal vote. Result: 165,792 graded plans in
+23 minutes. Details and caveats: [`docs/Q4_HARNESS.md`](docs/Q4_HARNESS.md);
+tables: [`docs/q4/q4_summary.md`](docs/q4/q4_summary.md); data and SAM setup:
+[`docs/Q4_DATA.md`](docs/Q4_DATA.md), [`docs/Q4_SAM.md`](docs/Q4_SAM.md).
+
+| | SAM 2 tiny | SAM 2 small |
+| --- | --- | --- |
+| image IoU vs ground truth (mean) | 0.964 | 0.969 |
+| falsely free floor (the dangerous error), image | 0.01% | 0.04% |
+| floor missed (fails safe), image | 3.6% | 3.0% |
+| bird's-eye IoU | 0.916 | 0.933 |
+| end-to-end latency, median / p90 | **527 / 608 ms** | 637 / 718 ms |
+
+**1. SAM 2 errs on the safe side.** It misses about 100× more floor than it
+invents. By Q3's results, that means it strands more than it crashes.
+
+**2. The planner still matters.** Collision % of plans, raw frames,
+erosion 0:
+
+| | A* | weighted A* λ64 | Voronoi `nearest` | Voronoi `best64` | stranded |
+| --- | --- | --- | --- | --- | --- |
+| ground-truth grid (control) | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 |
+| SAM 2 tiny | 0.8 | 0.0 | 0.0 | **0.0** | 12.7 |
+| SAM 2 small | 0.7 | 0.1 | 0.2 | **0.1** | 15.8 |
+
+Every raw SAM collision traces to one object: a flat sign lying on the
+school corridor's floor, which SAM calls floor for 15 consecutive frames.
+That's Q3's thin-obstacle miss, met in the wild. Grid A* cuts across it,
+and the clearance-aware planners keep their distance and pass. (Whether a
+flat sign is an obstacle at all is arguably a labeling question.)
+
+**3. SAM's leaks are much milder than Q3's worst case.** Q3's uniform 3 px
+leak caused 45–90% collisions. SAM's leaks touch only 1–2% of the boundary
+and stay local. A single camera view is also nearly "star-shaped" around the
+robot, so short paths to visible goals rarely graze a boundary.
+`q4_on_q3.png` places SAM's frames on Q3's curves.
+
+**4. What did not pay off on real masks:**
+- *Erosion* (Q3's "err toward shrinking"). SAM already errs that way.
+  Eroding 2 px removes almost no false floor but raises stranding by 7–10
+  points. The recommended setting is erosion 0.
+- *Mask-selection rule.* For tiny, SAM's top-scoring mask already was the
+  largest consistent one on all 3 sequences. The "part instead of whole"
+  failure didn't occur with these prompts.
+- *Temporal vote.* It can't fix a sustained error (the sign held the
+  majority), and its warp across frames costs about 4–6 points of stranding.
+  SAM 2's own video memory already provides most of the temporal consistency.
+
+**5. The leak gate Q3 asked for works on leaks, not clutter.** On injected
+3 px leaks under real camera motion, the new "added floor near the boundary"
+gate catches 65% at 88% precision, where Q3's IoU gate catches 8%. Neither
+gate sees a vanished thin obstacle.
+
+**6. Segmentation sets the speed.** SAM 2 is more than 99% of the frame
+time. The bird's-eye warp, JFA roadmap and Voronoi plan together take about
+4 ms. A tracking dropout happened once: tiny lost the hospital floor for 2
+frames after a sharp turn, which stranded the robot safely, and recovered.
+
+**Caveats:** synthetic Unreal-rendered video (clean textures, no blur, so
+this is an upper bound on real-world accuracy); 3 sequences of 15 s, so one
+object can dominate a rate; ground-truth poses instead of odometry for the
+vote; flat-floor assumption; goals limited to visible floor 2–4.5 m away.
+The natural follow-up is real RGB-D video (ScanNet, which requires its
+terms of use to be signed) or the user's own recordings.
+
 ## Week 3: roadmap and planners
 
 ![Planners on example maps](docs/q2/q2_example.png)
@@ -452,15 +541,22 @@ src/voronav/
   map_sources.py       map registry: synthetic generators (incl. cluttered_room) + MovingAI / image / HouseExpo dirs
   corruption.py        Q3 segmentation-error models + mask error stats
   temporal.py          Q3 bad-frame sequences + causal temporal filter
+  vision/              Q4: dataset loader, bird's-eye homography, SAM 2 floor
+                       segmentation, ego-motion alignment
+  demo.py, cli.py      the `voronav demo` command (offline GIF)
 configs/               debug.yaml (seconds), bench_quick.yaml (~10 s),
                        bench_q1.yaml (full Q1 sweep, heavy), bench_q2_quick.yaml,
                        bench_q2.yaml (full Q2 study), bench_q2_narrow.yaml,
-                       bench_q3_quick.yaml, bench_q3.yaml (full Q3 study)
+                       bench_q3_quick.yaml, bench_q3.yaml (full Q3 study),
+                       bench_q4.yaml (Q4 study), debug_*.yaml (test fixtures)
 scripts/               bench_jfa.py (harness -> JSONL), plot_q1.py (figures),
                        probe_mps.py (why eager MPS was slow), plan_demo.py (Q2 figure),
                        fetch_maps.py (benchmark maps, see docs/DATA.md),
                        bench_plan.py / plot_q2.py / summarize_q2.py (Q2 study),
-                       bench_q3.py / plot_q3.py / summarize_q3.py (Q3 study)
+                       bench_q3.py / plot_q3.py / summarize_q3.py (Q3 study),
+                       fetch_q4_data.py / fetch_sam2.py / time_sam2.py (Q4 setup),
+                       bench_q4.py / plot_q4.py / summarize_q4.py (Q4 study),
+                       demo.py (wrapper for `voronav demo`)
 tests/                 property, cross-backend, loader, config, end-to-end
 ```
 
@@ -468,7 +564,7 @@ tests/                 property, cross-backend, loader, config, end-to-end
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -e ".[dev,torch]"
-.venv/bin/python -m pytest -q                                          # ~10 s
+.venv/bin/python -m pytest -q                                          # ~16 s
 .venv/bin/python scripts/bench_jfa.py --config configs/bench_quick.yaml # ~10 s, light
 .venv/bin/python scripts/plan_demo.py --out docs/q2                     # ~2 s
 ```
@@ -500,9 +596,20 @@ The Q3 study takes about 11 minutes:
 .venv/bin/python scripts/summarize_q3.py runs/bench_q3/results.jsonl > docs/q3/q3_summary.md
 ```
 
+Q4 needs the vision extra (SAM 2, built without CUDA; see
+[`docs/Q4_SAM.md`](docs/Q4_SAM.md)), its weights (about 340 MB) and the
+TartanGround subset (about 250 MB). The study takes about 23 minutes; the
+demo needs no ground truth:
+
+```bash
+.venv/bin/python scripts/fetch_q4_data.py && .venv/bin/python scripts/fetch_sam2.py
+.venv/bin/python scripts/bench_q4.py --config configs/bench_q4.yaml
+.venv/bin/python -m voronav demo data/raw/q4/AbandonedSchool_P1001 --out docs/q4/demo.gif
+```
+
 ## Testing
 
-282 tests run in about 10 s on a laptop with no downloads. Every property test
+358 tests run in about 16 s (1 skipped without SAM 2 weights) on a laptop with no downloads. Every property test
 runs on every available backend (NumPy, Numba, PyTorch CPU, and MPS or CUDA
 when present).
 
@@ -548,3 +655,5 @@ when present).
   Skeletons", CVIU 1997; Shaked & Bruckstein, "Pruning Medial Axes", CVIU 1998
   (object-angle pruning)
 - Kirillov et al., "Segment Anything", ICCV 2023; Ravi et al., "SAM 2", 2024
+- TartanGround (CMU AirLab, ETH), IROS 2025, CC BY 4.0 (Q4 video and labels);
+  built on TartanAir, Wang et al., IROS 2020

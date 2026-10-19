@@ -1,0 +1,19 @@
+# Tiny Q4 config: one SAM condition per axis, a few frames. Used by the
+# smoke test (with --fake-segmenter and a synthetic sequence).
+q4:
+  max_frames: 8
+  models: [tiny]
+  rules: [largest_consistent]
+  erosion_px: [0, 2]
+  goals_per_frame: 2
+  planners: [voronoi, astar, weighted_astar]
+  lambdas: [64]
+  voronoi_variants:
+    - {name: best64, join: best, join_lam: 64, roadmap_lam: 64}
+  filter:
+    gates: [iou, leak]
+    window: 3
+  inject:
+    p_bad: 0.5
+    bad: [[boundary_shift, 3]]
+  out_dir: runs/debug_q4

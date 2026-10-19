@@ -346,6 +346,145 @@ class Q3Config:
     q3: Q3BenchConfig = field(default_factory=Q3BenchConfig)
 
 
+Q4_PLANNERS = Q3_PLANNERS
+SAM_MODELS = ("tiny", "small")
+SAM_RULES = ("top_score", "largest_consistent")
+Q4_GATES = ("iou", "leak", "both")
+
+
+@dataclass
+class Q4FilterConfig:
+    """The temporal filter on ego-motion-aligned BEV grids
+    (voronav.vision.egomotion). One filtered stream per gate, next to raw."""
+
+    gates: list[str] = field(default_factory=lambda: ["iou", "leak"])
+    window: int = 5
+    outlier_iou: float = 0.8   # Q3's gate threshold
+    leak_frac: float = 0.05    # leak gate: new free near the boundary / previous free area
+    band_px: float = 3.0       # leak gate: how far from the previous floor counts as "near"
+    patience: int | None = 3
+
+    def __post_init__(self) -> None:
+        for g in self.gates:
+            if g not in Q4_GATES:
+                raise ValueError(f"q4.filter.gates: unknown gate {g!r} (one of {Q4_GATES})")
+        if len(set(self.gates)) != len(self.gates):
+            raise ValueError("q4.filter.gates has duplicates")
+        if self.window < 1 or not 0.0 <= self.outlier_iou <= 1.0:
+            raise ValueError("q4.filter: window must be >= 1, outlier_iou in [0, 1]")
+        if self.leak_frac < 0 or self.band_px <= 0:
+            raise ValueError("q4.filter: leak_frac must be >= 0 and band_px > 0")
+        if self.patience is not None and self.patience < 1:
+            raise ValueError("q4.filter.patience must be >= 1 or null")
+
+
+@dataclass
+class Q4InjectConfig:
+    """Synthetic bad frames (Q3's corruption models) injected into the
+    ground-truth BEV stream with probability p_bad, so the gates can be
+    scored on known leaks under real camera motion. Off when `bad` is empty."""
+
+    p_bad: float = 0.2
+    bad: list[Any] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        if not 0.0 <= self.p_bad <= 1.0:
+            raise ValueError("q4.inject.p_bad must be in [0, 1]")
+        self.bad = [_check_corruption("q4.inject.bad", b) for b in self.bad]
+        if None in self.bad:
+            raise ValueError("q4.inject.bad entries must be [name, level], not null")
+
+
+@dataclass
+class Q4BenchConfig:
+    """Q4: real SAM 2 floor masks on TartanGround video -> BEV -> plan; grade
+    every path on the ground-truth BEV of the same frame."""
+
+    data_dir: str = "data/raw/q4"
+    sequences: list[str] | None = None  # directory names under data_dir; None = all
+    max_frames: int | None = None       # first k frames of each sequence
+    models: list[str] = field(default_factory=lambda: list(SAM_MODELS))
+    rules: list[str] = field(default_factory=lambda: list(SAM_RULES))
+    erosion_px: list[int] = field(default_factory=lambda: [0, 2])  # post-process on cached masks
+    precision: str | None = None        # Sam2Floor precision (None = bf16 on MPS)
+    prompt_frames: list[int] = field(default_factory=lambda: [0])
+    mask_cache_dir: str = "runs/q4_masks"
+    # BEV grid (vision.bev.mask_to_bev); defaults are the recommended ones
+    px_per_m: float = 20.0
+    extent_m: list[float] = field(default_factory=lambda: [5.0, 8.0])
+    max_range_m: float = 5.0
+    supersample: int = 2
+    robot_radius: float = 2.0           # px (2 px = 10 cm at 20 px/m)
+    goals_per_frame: int = 3
+    goal_dist_m: list[float] = field(default_factory=lambda: [2.0, 4.5])
+    seed: int = 0
+    planners: list[str] = field(default_factory=lambda: list(Q4_PLANNERS))
+    lambdas: list[float] = field(default_factory=lambda: [64.0])
+    voronoi_variants: list[VoronoiVariantConfig] = field(
+        default_factory=lambda: [VoronoiVariantConfig()]
+    )
+    control: bool = True                # plan on the GT BEV itself (must never collide)
+    filter: Q4FilterConfig = field(default_factory=Q4FilterConfig)
+    inject: Q4InjectConfig = field(default_factory=Q4InjectConfig)
+    cooldown_s: float = 0.0             # pause after each sequence (fanless laptop)
+    out_dir: str = "runs/bench_q4"
+
+    def __post_init__(self) -> None:
+        if self.sequences is not None and not self.sequences:
+            raise ValueError("q4.sequences must be null (all) or non-empty")
+        if self.max_frames is not None and self.max_frames < 2:
+            raise ValueError("q4.max_frames must be >= 2 or null")
+        for m in self.models:
+            if m not in SAM_MODELS:
+                raise ValueError(f"q4.models: unknown model {m!r} (one of {SAM_MODELS})")
+        for r in self.rules:
+            if r not in SAM_RULES:
+                raise ValueError(f"q4.rules: unknown rule {r!r} (one of {SAM_RULES})")
+        for name in ("models", "rules", "erosion_px"):
+            v = getattr(self, name)
+            if not v or len(set(v)) != len(v):
+                raise ValueError(f"q4.{name} must be non-empty without duplicates")
+        if any(int(e) != e or e < 0 for e in self.erosion_px):
+            raise ValueError("q4.erosion_px must be integers >= 0")
+        if self.precision not in (None, "fp32", "bf16", "fp16"):
+            raise ValueError("q4.precision must be null, fp32, bf16 or fp16")
+        if not self.prompt_frames or any(f < 0 for f in self.prompt_frames):
+            raise ValueError("q4.prompt_frames must be non-empty, each >= 0")
+        if self.px_per_m <= 0 or len(self.extent_m) != 2 or min(self.extent_m) <= 0:
+            raise ValueError("q4: px_per_m > 0 and extent_m = [forward_m, width_m] > 0")
+        if self.max_range_m <= 0 or self.supersample < 1:
+            raise ValueError("q4: max_range_m > 0 and supersample >= 1")
+        if self.robot_radius < 0 or self.goals_per_frame < 1:
+            raise ValueError("q4: robot_radius >= 0 and goals_per_frame >= 1")
+        if len(self.goal_dist_m) != 2 or not 0 <= self.goal_dist_m[0] < self.goal_dist_m[1]:
+            raise ValueError("q4.goal_dist_m must be [min, max] with 0 <= min < max")
+        for p in self.planners:
+            if p not in Q4_PLANNERS:
+                raise ValueError(f"q4.planners: unknown planner {p!r} (one of {Q4_PLANNERS})")
+        if not self.planners or len(set(self.planners)) != len(self.planners):
+            raise ValueError("q4.planners must be non-empty without duplicates")
+        if "weighted_astar" in self.planners and not self.lambdas:
+            raise ValueError("q4.lambdas must be non-empty when weighted_astar runs")
+        if any(lam < 0 for lam in self.lambdas):
+            raise ValueError("q4.lambdas must be >= 0")
+        self.voronoi_variants = [v if isinstance(v, VoronoiVariantConfig)
+                                 else _build(VoronoiVariantConfig, v)
+                                 for v in self.voronoi_variants]
+        if "voronoi" in self.planners and not self.voronoi_variants:
+            raise ValueError("q4.voronoi_variants must be non-empty when voronoi runs")
+        names = [v.name for v in self.voronoi_variants]
+        if len(set(names)) != len(names):
+            raise ValueError("q4.voronoi_variants: names must be unique")
+        if self.cooldown_s < 0:
+            raise ValueError("q4.cooldown_s must be >= 0")
+
+
+@dataclass
+class Q4Config:
+    roadmap: RoadmapConfig = field(default_factory=RoadmapConfig)
+    q4: Q4BenchConfig = field(default_factory=Q4BenchConfig)
+
+
 @dataclass
 class Q2Config:
     roadmap: RoadmapConfig = field(default_factory=RoadmapConfig)
@@ -381,6 +520,10 @@ _NESTED = {
     ("Q3Config", "roadmap"): RoadmapConfig,
     ("Q3Config", "q3"): Q3BenchConfig,
     ("Q3BenchConfig", "frames"): FramesConfig,
+    ("Q4Config", "roadmap"): RoadmapConfig,
+    ("Q4Config", "q4"): Q4BenchConfig,
+    ("Q4BenchConfig", "filter"): Q4FilterConfig,
+    ("Q4BenchConfig", "inject"): Q4InjectConfig,
 }
 
 
@@ -408,3 +551,9 @@ def to_dict(obj: Any) -> Any:
     if isinstance(obj, list):
         return [to_dict(v) for v in obj]
     return obj
+
+
+def load_q4_config(path: str | Path) -> Q4Config:
+    with open(path) as f:
+        raw = yaml.safe_load(f) or {}
+    return _build(Q4Config, raw)

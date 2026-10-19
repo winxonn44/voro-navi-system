@@ -1,0 +1,50 @@
+# Q4 study: real SAM 2 floor masks on TartanGround first-person video ->
+# bird's-eye grid -> plan; every path graded on the ground-truth grid of the
+# same frame. 3 sequences x 150 frames; SAM 2 runs once per (sequence,
+# model, rule), ~0.5 s/frame on MPS, so ~15 min of SAM on a fanless M4
+# MacBook Air (run plugged in), plus planning. Masks are cached in
+# runs/q4_masks, so a rerun only pays for planning.
+#   python scripts/bench_q4.py --config configs/bench_q4.yaml
+roadmap:
+  backend: numba
+  variant: jfa+2
+  bridge_lam: 64  # as in Q2/Q3
+
+q4:
+  data_dir: data/raw/q4
+  sequences: null          # all three: AbandonedSchool_P1001, Hospital_P1000, Office_P0000
+  max_frames: null
+  models: [tiny, small]
+  rules: [top_score, largest_consistent]
+  erosion_px: [0, 2]       # 2 px of the 640 px image; post-process on cached masks
+  precision: null          # bf16 autocast on MPS (docs/Q4_SAM.md)
+  prompt_frames: [0]       # default_floor_prompts on the first frame only, then SAM 2 tracks
+  # recommended BEV grid (docs/Q4_DATA.md): 5 cm cells, 5 m x 8 m, 5 m range
+  px_per_m: 20
+  extent_m: [5, 8]
+  max_range_m: 5
+  supersample: 2
+  robot_radius: 2.0        # px = 10 cm
+  goals_per_frame: 3
+  goal_dist_m: [2.0, 4.5]
+  seed: 0
+  planners: [voronoi, astar, weighted_astar]
+  lambdas: [64]
+  voronoi_variants:
+    - {name: nearest}
+    - {name: best64, join: best, join_lam: 64, roadmap_lam: 64}
+  control: true            # plan on the GT grid itself: must never collide
+  filter:
+    gates: [iou, leak]     # Q3's IoU gate and the leak gate it recommended
+    window: 5              # 0.5 s at 10 Hz
+    outlier_iou: 0.8
+    leak_frac: 0.05
+    band_px: 3
+    patience: 3
+  inject:                  # Q3 corruptions on random GT frames, to score the gates under real motion
+    p_bad: 0.2
+    bad:
+      - [boundary_shift, 3]
+      - [thin_obstacle_miss, 4]
+  cooldown_s: 30
+  out_dir: runs/bench_q4
