@@ -1,0 +1,178 @@
+name: core
+
+# The optional C++ core (core/) and the Python suite run against it.
+# Design doc A9: build-test on macOS arm64 + Linux gcc/clang, sanitizers, lint,
+# and a benchmark smoke run.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: core-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CMAKE_GENERATOR: Ninja
+  CCACHE_DIR: ${{ github.workspace }}/.ccache
+
+jobs:
+  build-test:
+    name: build-test (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: macos-arm64-appleclang, os: macos-14, cc: clang, cxx: clang++ }
+          - { name: ubuntu-gcc, os: ubuntu-24.04, cc: gcc, cxx: g++ }
+          - { name: ubuntu-clang, os: ubuntu-24.04, cc: clang, cxx: clang++ }
+    env:
+      CC: ${{ matrix.cc }}
+      CXX: ${{ matrix.cxx }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Ninja (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+      - name: Install Ninja (macOS)
+        if: runner.os == 'macOS'
+        run: brew install ninja
+
+      - uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: build-test-${{ matrix.name }}
+
+      - name: Configure
+        run: >
+          cmake -S core -B core/build
+          -DCMAKE_BUILD_TYPE=RelWithDebInfo
+          -DVORONAV_WERROR=ON
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+      - name: Build
+        run: cmake --build core/build
+      - name: ctest
+        run: ctest --test-dir core/build --output-on-failure
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - name: Install voronav and voronav-core
+        run: |
+          python -m pip install --upgrade pip
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            # CPU-only torch; the default Linux wheel pulls in ~2 GB of CUDA.
+            python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          fi
+          python -m pip install -e ".[dev,torch]"
+          python -m pip install -e ./core \
+            -Ccmake.define.VORONAV_WERROR=ON \
+            -Ccmake.define.CMAKE_CXX_COMPILER_LAUNCHER=ccache
+      - name: pytest
+        run: |
+          python -c "import voronav_core; print('voronav_core', voronav_core.version())"
+          python -m pytest -q
+
+  sanitizers:
+    name: sanitizers (${{ matrix.name }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: asan-ubsan, sanitize: "address,undefined" }
+          - { name: tsan, sanitize: "thread" }
+    env:
+      CC: clang
+      CXX: clang++
+      ASAN_OPTIONS: detect_leaks=1:abort_on_error=1
+      UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+      TSAN_OPTIONS: halt_on_error=1
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Ninja
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+      # Ubuntu 24.04 runners use 32 bits of mmap ASLR, which TSan (and some
+      # ASan builds) cannot map around; 28 is the pre-6.x-kernel default.
+      - name: Reduce mmap ASLR entropy
+        run: sudo sysctl vm.mmap_rnd_bits=28
+      - uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: sanitizers-${{ matrix.name }}
+      - name: Configure
+        run: >
+          cmake -S core -B core/build
+          -DCMAKE_BUILD_TYPE=Debug
+          -DVORONAV_WERROR=ON
+          -DVORONAV_BUILD_BENCH=OFF
+          -DVORONAV_SANITIZE=${{ matrix.sanitize }}
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+      - name: Build
+        run: cmake --build core/build
+      - name: ctest
+        run: ctest --test-dir core/build --output-on-failure
+
+  lint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # clang-format output changes between major versions, so pin it to the
+      # one used locally (PyPI wheel; Homebrew's clang-format 23 matches).
+      - name: Install tools
+        run: |
+          sudo apt-get update && sudo apt-get install -y ninja-build clang-tidy-18
+          pipx install clang-format==23.1.3  # system pip is PEP 668-locked
+      - name: clang-format check
+        run: |
+          clang-format --version
+          git ls-files 'core/*.hpp' 'core/*.cpp' \
+            | xargs clang-format --dry-run --Werror --style=file
+      - name: Configure (for compile_commands.json)
+        env:
+          CC: clang
+          CXX: clang++
+        run: cmake -S core -B core/build -DVORONAV_BUILD_BENCH=OFF
+      - name: clang-tidy on changed files
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base="origin/${{ github.base_ref }}"
+          else
+            base="${{ github.event.before }}"
+          fi
+          # A new branch or a force push has no usable "before"; check everything.
+          if ! git rev-parse -q --verify "$base^{commit}" >/dev/null; then
+            base="$(git hash-object -t tree /dev/null)"
+          fi
+          # Translation units in compile_commands.json only (bindings.cpp
+          # needs the Python build, which this job does not configure).
+          files=$(git diff --name-only --diff-filter=d "$base" -- \
+                    'core/src/*.cpp' 'core/tests/*.cpp')
+          if [ -z "$files" ]; then echo "no C++ sources changed"; exit 0; fi
+          echo "$files"
+          clang-tidy-18 -p core/build --warnings-as-errors='*' $files
+
+  bench-smoke:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Ninja
+        run: brew install ninja
+      - uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: bench-smoke
+      - name: Build benchmarks
+        run: |
+          cmake -S core -B core/build -DCMAKE_BUILD_TYPE=Release \
+            -DVORONAV_BUILD_TESTS=OFF -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          cmake --build core/build --target core_bench
+      # 256^2 only, to catch crashes; real numbers come from a quiet machine.
+      - name: Run at 256^2
+        run: >
+          core/build/bench/core_bench
+          --benchmark_filter='/256$'
+          --benchmark_min_time=0.05s

@@ -569,6 +569,11 @@ python3 -m venv .venv && .venv/bin/pip install -e ".[dev,torch]"
 .venv/bin/python scripts/plan_demo.py --out docs/q2                     # ~2 s
 ```
 
+**Optional C++ core.** `core/` holds a C++20 port in progress, packaged
+separately so the install above never needs a compiler. With CMake and Ninja
+installed, `.venv/bin/pip install -e ./core` adds it; see
+[`core/README.md`](core/README.md).
+
 The full Q1 study (`configs/bench_q1.yaml`) is about 5,000 diagrams and over
 30 minutes of all-core load. On a fanless laptop, run it once, plugged in; it
 pauses 2 s between rows to limit thermal-throttling bias:

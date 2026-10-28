@@ -1,0 +1,20 @@
+[build-system]
+requires = ["scikit-build-core>=0.10"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "voronav-core"
+version = "0.0.1"  # keep in sync with project(VERSION) in CMakeLists.txt
+description = "C++20 core for voronav: JFA Voronoi engine, roadmap and planners (pybind11)"
+license = "MIT"
+authors = [{ name = "Winxon Nguyen" }]
+requires-python = ">=3.11"
+dependencies = ["numpy>=2.0"]
+
+[tool.scikit-build]
+minimum-version = "build-system.requires"
+cmake.version = ">=3.24"
+ninja.version = ">=1.10"
+build-dir = "build-py/{wheel_tag}"  # persistent, so reinstalls are incremental
+wheel.packages = ["python/voronav_core"]
+cmake.build-type = "Release"
