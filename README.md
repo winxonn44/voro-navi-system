@@ -657,3 +657,17 @@ when present).
 - Kirillov et al., "Segment Anything", ICCV 2023; Ravi et al., "SAM 2", 2024
 - TartanGround (CMU AirLab, ETH), IROS 2025, CC BY 4.0 (Q4 video and labels);
   built on TartanAir, Wang et al., IROS 2020
+
+## License
+
+The code in this repository is MIT-licensed; see [`LICENSE`](LICENSE).
+
+Third-party material keeps its own terms:
+- **Datasets are not redistributed.** The fetch scripts download them from
+  their sources: MovingAI, HouseExpo and TartanGround (licenses and
+  attribution in [`docs/DATA.md`](docs/DATA.md) and
+  [`docs/Q4_DATA.md`](docs/Q4_DATA.md)).
+- **`docs/q4/demo.gif`** contains frames from TartanGround © Carnegie Mellon
+  University AirLab, used under CC BY 4.0.
+- **SAM 2** (code and checkpoints) is Apache-2.0 and is installed separately,
+  not vendored ([`docs/Q4_SAM.md`](docs/Q4_SAM.md)).

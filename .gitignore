@@ -9,3 +9,4 @@ data/raw/
 runs_*.log
 .ipynb_checkpoints/
 .Rhistory
+/planning/

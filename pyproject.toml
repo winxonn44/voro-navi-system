@@ -2,6 +2,9 @@
 name = "voronav"
 version = "0.1.0"
 description = "From-scratch parallel Voronoi roadmaps for offline, segmentation-driven navigation"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Winxon Nguyen" }]
 requires-python = ">=3.11"
 dependencies = [
     "numpy>=2.0",
