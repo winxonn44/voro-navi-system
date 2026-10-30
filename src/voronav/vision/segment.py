@@ -281,9 +281,9 @@ def _cache_tag(seg) -> str:
 
 
 def default_device() -> str:
-    import torch
+    from ..devices import mps_enabled
 
-    return "mps" if torch.backends.mps.is_available() else "cpu"
+    return "mps" if mps_enabled() else "cpu"
 
 
 class Sam2Floor:

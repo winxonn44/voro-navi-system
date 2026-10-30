@@ -1,0 +1,37 @@
+---
+# Check families from the design doc (A3): bugprone, performance, modernize,
+# cppcoreguidelines. Each exclusion below says why it is off.
+Checks: >
+  -*,
+  bugprone-*,
+  performance-*,
+  modernize-*,
+  cppcoreguidelines-*,
+  -modernize-use-trailing-return-type,
+  -modernize-use-nodiscard,
+  -bugprone-easily-swappable-parameters,
+  -cppcoreguidelines-avoid-magic-numbers,
+  -cppcoreguidelines-pro-bounds-pointer-arithmetic,
+  -cppcoreguidelines-pro-bounds-constant-array-index,
+  -cppcoreguidelines-avoid-non-const-global-variables,
+  -cppcoreguidelines-owning-memory,
+  -cppcoreguidelines-non-private-member-variables-in-classes,
+  -cppcoreguidelines-pro-type-reinterpret-cast
+# Why the exclusions:
+#   use-trailing-return-type    style only; the code uses `T f()`.
+#   use-nodiscard               applied by hand where ignoring a result is a bug.
+#   easily-swappable-parameters (y, x) and (height, width) pairs are everywhere.
+#   avoid-magic-numbers         test and benchmark sizes are literal by design.
+#   pro-bounds-pointer-arithmetic, pro-bounds-constant-array-index
+#                               GridView is a pointer + shape; indexing it is the point.
+#   avoid-non-const-global-variables, owning-memory
+#                               GoogleTest / Google Benchmark macros expand to these.
+#   non-private-member-variables-in-classes
+#                               GridView is a plain aggregate-like view, like std::span.
+#   pro-type-reinterpret-cast   only used to report a buffer address to Python.
+WarningsAsErrors: ''
+HeaderFilterRegex: '.*/core/(include|src|tests|bench|python)/.*'
+FormatStyle: file
+CheckOptions:
+  - key: cppcoreguidelines-special-member-functions.AllowSoleDefaultDtor
+    value: true

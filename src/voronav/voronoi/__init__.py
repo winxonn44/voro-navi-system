@@ -35,7 +35,8 @@ def make_runner(
 ) -> tuple[Callable[[], None], Callable[[], np.ndarray]]:
     """Return (run, fetch). `run()` executes JFA and blocks until it is done;
     `fetch()` returns the last result as a numpy array. `schedule` is
-    numba-only ("dynamic" or "static" row distribution)."""
+    numba-only ("dynamic" or "static" row distribution). `backend="cpp"`
+    needs the optional C++ core (`core/`, see `import_core`)."""
     init = init_nearest(sites)
     steps = step_schedule(*sites.shape, variant)
     result: dict[str, object] = {}
@@ -70,9 +71,35 @@ def make_runner(
         def fetch() -> np.ndarray:
             return result["out"].cpu().numpy()  # type: ignore[union-attr]
 
+    elif backend == "cpp":
+        core = import_core()
+        # C0 ships only the scaffolding; the C++ JFA arrives in checkpoint C1/C2.
+        raise NotImplementedError(
+            f"backend='cpp': voronav-core {core.version()} has no JFA yet"
+        )
+
     else:
         raise ValueError(f"unknown backend {backend!r}")
     return run, fetch
+
+
+CORE_INSTALL_HINT = (
+    "pip install -e ./core  (from the repository root; needs CMake, Ninja "
+    "and a C++20 compiler; see core/README.md)"
+)
+
+
+def import_core():
+    """Import the optional C++ extension (`voronav-core`), or raise an
+    ImportError that says how to install it."""
+    try:
+        import voronav_core
+    except ImportError as e:
+        raise ImportError(
+            f"backend='cpp' needs the optional C++ core, which is not installed. "
+            f"Install it with: {CORE_INSTALL_HINT}"
+        ) from e
+    return voronav_core
 
 
 def voronoi(

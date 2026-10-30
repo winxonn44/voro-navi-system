@@ -19,6 +19,7 @@ from __future__ import annotations
 import numpy as np
 import torch
 
+from ..devices import mps_enabled
 from .common import BIG, NO_SITE
 
 
@@ -165,7 +166,7 @@ def synchronize(device: str) -> None:
 
 def available_devices() -> list[str]:
     devs = ["cpu"]
-    if torch.backends.mps.is_available():
+    if mps_enabled():
         devs.append("mps")
     if torch.cuda.is_available():
         devs.append("cuda")

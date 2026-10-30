@@ -10,3 +10,4 @@ runs_*.log
 .ipynb_checkpoints/
 .Rhistory
 /planning/
+/core/build*/
