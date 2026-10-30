@@ -63,14 +63,26 @@ class Grid {
   [[nodiscard]] T* data() noexcept { return data_.data(); }
   [[nodiscard]] const T* data() const noexcept { return data_.data(); }
 
-  [[nodiscard]] GridView<T> view() noexcept { return {data_.data(), height_, width_}; }
-  [[nodiscard]] GridView<const T> view() const noexcept { return {data_.data(), height_, width_}; }
+  // The shape was validated once, in the constructor, so views are built
+  // without GridView's checking constructor (which may throw) and can be
+  // noexcept.
+  [[nodiscard]] GridView<T> view() noexcept { return make_view(data_.data()); }
+  [[nodiscard]] GridView<const T> view() const noexcept { return make_view(data_.data()); }
   [[nodiscard]] T& operator()(int y, int x) noexcept { return view()(y, x); }
   [[nodiscard]] const T& operator()(int y, int x) const noexcept { return view()(y, x); }
 
   friend bool operator==(const Grid&, const Grid&) = default;
 
  private:
+  template <typename U>
+  [[nodiscard]] GridView<U> make_view(U* p) const noexcept {
+    GridView<U> v;  // default constructor: noexcept, no check
+    v.data = p;
+    v.height = height_;
+    v.width = width_;
+    return v;
+  }
+
   static int check_dim(int n) {
     if (n < 0) {
       throw std::invalid_argument("Grid: negative shape");

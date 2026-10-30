@@ -32,6 +32,10 @@ jobs:
     env:
       CC: ${{ matrix.cc }}
       CXX: ${{ matrix.cxx }}
+      # GitHub's macOS runners are VMs: MPS reports available but every
+      # allocation fails, so the MPS tests run on real Apple hardware only
+      # (see src/voronav/devices.py).
+      VORONAV_DISABLE_MPS: "1"
     steps:
       - uses: actions/checkout@v4
 
