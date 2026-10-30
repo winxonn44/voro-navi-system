@@ -123,7 +123,9 @@ efficiency cores being slower, not a serial fraction.
 density, with the worst pixel off by 3.4 px. One extra k=1 pass helps more when
 it runs *first*: `1+jfa` leaves 1.2e-6 versus 6.7e-6 for `jfa+1` at the same
 cost. `jfa+2` was exact on every instance measured here (one seed per
-configuration). The roadmap default should be `1+jfa` or `jfa+2`, with the
+configuration), but it is not exact in general: on many small random grids it
+gets about 9e-6 of pixels wrong, mostly at low density (see the C1 results in
+[core/README.md](core/README.md)). The roadmap default should be `1+jfa` or `jfa+2`, with the
 choice made in Q2 by whether the residual error changes paths.
 
 Caveats: one seed, one machine, and laptop timings are sensitive to thermal

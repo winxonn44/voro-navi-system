@@ -27,7 +27,7 @@ namespace voronav {
 inline constexpr int64_t kNoSite = -1;
 
 // The JFA variants of config.VARIANTS: "jfa", "jfa+1", "jfa+2", "1+jfa".
-enum class Variant { Jfa, JfaPlus1, JfaPlus2, OnePlusJfa };
+enum class Variant : std::uint8_t { Jfa, JfaPlus1, JfaPlus2, OnePlusJfa };
 
 // Seed grid: each site (any nonzero cell) points at its own flat index, every
 // other cell is kNoSite.

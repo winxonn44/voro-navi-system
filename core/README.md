@@ -90,31 +90,48 @@ a bad one throws `std::invalid_argument`.
 against `brute_force` on 1,000 seeded random grids: sides uniform in 1–64 (so
 mostly non-square, many odd or 1 wide), plus 80 grids at 96–128 per side; site
 densities 0.2%, 1%, 5%, 20% and 60%, Bernoulli per cell (so some grids have no
-sites at all). 1,939,437 pixels in total. Every variant keeps the invariants of
-`tests/test_jfa_properties.py` on every pixel: assigned iff a site exists, only
-to a real site, sites keep themselves, never closer than the true nearest
-site. **`jfa+2` gets the distance right on every pixel of every grid** (the
-assertion), and also picks the oracle's site everywhere on this set.
+sites at all). 1,953,113 pixels in total. The grids are drawn with the
+portable helpers in `tests/test_random.hpp`, not `std::uniform_int_distribution`
+or `std::bernoulli_distribution`, whose output differs between libc++ (macOS)
+and libstdc++ (Linux); `TestRandom.DrawsArePinned` pins the draws, so every
+platform tests the same grids. Every variant keeps the invariants of
+`tests/test_jfa_properties.py` on every pixel, and that is asserted exactly:
+assigned iff a site exists, only to a real site, sites keep themselves, never
+closer than the true nearest site.
+
+**`jfa+2` is not exact.** On this set of 1,000 grids it happens to get every
+distance right, but that is luck, not a property. Before the draws were made
+portable, the Linux CI jobs drew a different 1,000 grids and `jfa+2` got 4
+pixels wrong. The Python reference (the same algorithm, bit-identical) got 190
+pixels wrong in 31 of 18,334 random grids of the same kind, a rate of about
+9e-6, concentrated at low site density.
+The smallest case with two sites is 12 × 13 with sites at flat indices 39 and
+151: pixel 12 keeps site 39 (d2 = 153) although site 151 is closer (d2 = 137).
+An exhaustive search found no smaller two-site grid with a `jfa+2` error.
+`OracleAgreement.JfaPlus2MinimalCounterexample` pins the exact wrong pixels of
+every variant on that grid (`jfa` 10, `jfa+1` 6, `jfa+2` 1, `1+jfa` 0, the same
+as `jfa_numpy` gives), so it doubles as a C++/Python parity anchor for C2. The
+`jfa+2` rate is therefore only bounded (< 1e-4), not asserted to be zero.
 
 Residual error, measured as in Q1 (fraction of pixels whose distance differs
-from the oracle's); recorded, not asserted beyond `jfa < 1%` and
-`jfa+1 <= jfa`:
+from the oracle's); recorded, not asserted beyond `jfa < 1%`, `jfa+2 < 1e-4`
+and `jfa+1 <= jfa`:
 
 | Variant | 0.2% | 1% | 5% | 20% | 60% | All 1,000 grids |
 | --- | --- | --- | --- | --- | --- | --- |
-| `jfa` | 9.5e-5 | 2.5e-4 | 8.2e-4 | 9.8e-4 | 0 | **3.0e-4** (587 px) |
-| `jfa+1` | 1.8e-5 | 3.6e-5 | 5.5e-5 | 0 | 0 | 2.4e-5 (47 px) |
-| `jfa+2` | 0 | 0 | 0 | 0 | 0 | 0 |
-| `1+jfa` | 1.5e-6 | 3.0e-6 | 0 | 0 | 0 | 1.5e-6 (3 px) |
+| `jfa` | 9.6e-5 | 2.5e-4 | 8.2e-4 | 9.8e-4 | 0 | **3.0e-4** (588 px) |
+| `jfa+1` | 1.8e-5 | 2.4e-5 | 5.5e-5 | 0 | 0 | 2.0e-5 (39 px) |
+| `jfa+2` | 0 | 0 | 0 | 0 | 0 | 0 (about 9e-6 in general, see above) |
+| `1+jfa` | 3.0e-6 | 4.6e-6 | 0 | 0 | 0 | 2.6e-6 (5 px) |
 
 These are small grids (median side about 32), so the numbers are not directly
 comparable to Q1's large-grid rates (plain `jfa` at most 1.6e-4 per
 configuration there), but the ordering is the same: `1+jfa` beats `jfa+1` at
-the same cost, and `jfa+2` is exact.
+the same cost, and `jfa+2` has the lowest error.
 
 The test takes 0.7 s in the default RelWithDebInfo build, about 15 s under
 ASan+UBSan (Debug) and about 28 s under TSan (Debug) on the M4 Air; the whole
-suite is 34 tests.
+suite is 36 tests.
 
 **First serial timing** (`BM_RunStepsSerial`, one `run_steps` call including
 its copy of the input, 1% sites, `jfa+2`; median of 20 repetitions, Apple Clang

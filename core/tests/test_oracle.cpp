@@ -16,6 +16,8 @@
 #include "voronav/jfa.hpp"
 #include "voronav/oracle.hpp"
 
+#include "test_random.hpp"
+
 namespace voronav {
 namespace {
 
@@ -55,10 +57,9 @@ TEST(Oracle, HandComputedDistances) {
 
 TEST(Oracle, AssignsRealSitesAndSitesToThemselves) {
   std::mt19937_64 rng(5);
-  std::bernoulli_distribution coin(0.03);
   Grid<uint8_t> sites(30, 30, 0);
   for (std::size_t i = 0; i < sites.size(); ++i) {
-    sites.data()[i] = static_cast<uint8_t>(coin(rng));
+    sites.data()[i] = static_cast<uint8_t>(test::bernoulli(rng, 0.03));
   }
   sites(0, 0) = 1;  // at least one
   const Grid<int64_t> out = brute_force(sites.view());
@@ -72,6 +73,30 @@ TEST(Oracle, AssignsRealSitesAndSitesToThemselves) {
   }
 }
 
+TEST(TestRandom, DrawsArePinned) {
+  // The oracle-agreement grids must be the same on every platform. The
+  // standard pins mt19937_64's 10,000th output; the helpers' outputs are
+  // pinned here, so a platform that drew different grids fails this first.
+  std::mt19937_64 engine;
+  engine.discard(9999);
+  EXPECT_EQ(engine(), 9981545732273789042ULL);
+
+  std::mt19937_64 rng(42);
+  const std::array<uint64_t, 4> below{934706, 854435, 539344, 822067};
+  for (const uint64_t expected : below) {
+    EXPECT_EQ(test::uniform_below(rng, 1000003), expected);
+  }
+  const std::array<int, 4> ints{0, 21, 2, 1};
+  for (const int expected : ints) {
+    EXPECT_EQ(test::uniform_int(rng, -5, 27), expected);
+  }
+  int heads = 0;
+  for (int i = 0; i < 1000; ++i) {
+    heads += test::bernoulli(rng, 0.3) ? 1 : 0;
+  }
+  EXPECT_EQ(heads, 291);
+}
+
 // --- JFA vs the oracle on random grids -------------------------------------
 
 constexpr int kGrids = 1000;
@@ -82,17 +107,17 @@ constexpr std::array<const char*, 4> kVariantNames{"jfa", "jfa+1", "jfa+2", "1+j
 
 // Grid i: density kDensities[i % 5]; sides uniform in [1, 64], so most grids
 // are non-square and many are odd or 1 wide. Every 25th grid at the two lowest
-// densities is 96-128 per side instead, for longer schedules.
+// densities is 96-128 per side instead, for longer schedules. Drawn with the
+// portable helpers of test_random.hpp, so every platform tests the same grids.
 Grid<uint8_t> random_grid(int i) {
   std::mt19937_64 rng(0x5eed0000ULL + static_cast<uint64_t>(i));
   const bool large = i % 25 < 2;
-  std::uniform_int_distribution<int> side(large ? 96 : 1, large ? 128 : 64);
-  const int h = side(rng);
-  const int w = side(rng);
-  std::bernoulli_distribution coin(kDensities[static_cast<std::size_t>(i) % kDensities.size()]);
+  const int h = test::uniform_int(rng, large ? 96 : 1, large ? 128 : 64);
+  const int w = test::uniform_int(rng, large ? 96 : 1, large ? 128 : 64);
+  const double density = kDensities[static_cast<std::size_t>(i) % kDensities.size()];
   Grid<uint8_t> sites(h, w, 0);
   for (std::size_t p = 0; p < sites.size(); ++p) {
-    sites.data()[p] = static_cast<uint8_t>(coin(rng));
+    sites.data()[p] = static_cast<uint8_t>(test::bernoulli(rng, density));
   }
   return sites;
 }
@@ -160,13 +185,58 @@ TEST(OracleAgreement, ThousandRandomGrids) {
   std::cout << "[ residual ] jfa+2 pixels with a tied, different site: " << label_differs_jfa2
             << "\n";
 
-  // The checkpoint: jfa+2 gets every distance right on every grid.
-  EXPECT_EQ(total_wrong[2], 0) << "first grid with a jfa+2 error: " << first_bad_jfa2;
+  // jfa+2 is not exact (see JfaPlus2MinimalCounterexample): the Python
+  // reference got about 9e-6 of pixels wrong over 18,334 random grids of this
+  // kind, mostly at low density. These 1,000 happen to have no error, but that
+  // is not a guarantee, so only the invariants above are exact; the error
+  // rate is recorded and bounded.
+  EXPECT_LT(static_cast<double>(total_wrong[2]) / static_cast<double>(total_pixels), 1e-4)
+      << "first grid with a jfa+2 error: " << first_bad_jfa2;
   // Plain JFA's residual error is recorded, not pinned; only a sane bound
   // (Q1 measured at most 1.6e-4 per configuration).
   EXPECT_LT(static_cast<double>(total_wrong[0]) / static_cast<double>(total_pixels), 0.01);
   // As in test_error_rate_bounded_and_repaired_by_extra_pass.
   EXPECT_LE(total_wrong[1], total_wrong[0]);
+}
+
+TEST(OracleAgreement, JfaPlus2MinimalCounterexample) {
+  // jfa+2 is approximate. An exhaustive search over every two-site grid found
+  // no jfa+2 distance error below 156 px; this is the first one at 156:
+  // 12 x 13, sites 39 = (3, 0) and 151 = (11, 8). Pixel 12 = (0, 12) is at
+  // d2 = 137 from site 151 but keeps site 39 (d2 = 153).
+  // The expected wrong pixels per variant are the Python reference's
+  // (jfa_numpy.run_steps), so this also anchors C++/Python parity.
+  Grid<uint8_t> sites(12, 13, 0);
+  sites.data()[39] = 1;
+  sites.data()[151] = 1;
+  const Grid<int64_t> ref = brute_force(sites.view());
+  const Grid<int64_t> ref_d2 = distance_sq(ref.view());
+  const Grid<int64_t> init = init_nearest(sites.view());
+
+  struct Case {
+    Variant variant;
+    std::vector<std::size_t> wrong;  // flat indices, all assigned site 39 instead of 151
+  };
+  const std::array<Case, 4> cases{{
+      {Variant::Jfa, {12, 24, 25, 36, 37, 38, 48, 49, 50, 51}},
+      {Variant::JfaPlus1, {12, 24, 25, 36, 37, 38}},
+      {Variant::JfaPlus2, {12}},
+      {Variant::OnePlusJfa, {}},
+  }};
+  for (const Case& c : cases) {
+    const Grid<int64_t> out = run_steps(init.view(), step_schedule(12, 13, c.variant));
+    const Grid<int64_t> d2 = distance_sq(out.view());
+    std::vector<std::size_t> wrong;
+    for (std::size_t p = 0; p < out.size(); ++p) {
+      if (d2.data()[p] != ref_d2.data()[p]) {
+        wrong.push_back(p);
+        EXPECT_EQ(out.data()[p], 39) << p;
+        EXPECT_EQ(ref.data()[p], 151) << p;
+      }
+    }
+    EXPECT_EQ(wrong, c.wrong) << static_cast<int>(c.variant);
+  }
+  EXPECT_EQ(ref_d2.data()[12], 137);
 }
 
 }  // namespace

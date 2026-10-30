@@ -18,6 +18,8 @@
 #include "voronav/jfa.hpp"
 #include "voronav/oracle.hpp"
 
+#include "test_random.hpp"
+
 namespace voronav {
 namespace {
 
@@ -38,8 +40,8 @@ Grid<uint8_t> random_sites(int h, int w, int n, uint64_t seed) {
   }
   Grid<uint8_t> sites(h, w, 0);
   for (std::size_t i = 0; i < static_cast<std::size_t>(n); ++i) {
-    std::uniform_int_distribution<std::size_t> pick(i, cells.size() - 1);
-    std::swap(cells[i], cells[pick(rng)]);
+    const std::size_t j = i + test::uniform_below(rng, cells.size() - i);
+    std::swap(cells[i], cells[j]);
     sites.data()[cells[i]] = 1;
   }
   return sites;
@@ -260,7 +262,7 @@ TEST(RunSteps, CoreInvariantsEveryVariant) {
 TEST(RunSteps, DoubleBufferingKeepsInputIntact) {
   const Grid<uint8_t> sites = random_sites(20, 30, 12, 3);
   const Grid<int64_t> init = init_nearest(sites.view());
-  const Grid<int64_t> before = init;
+  const Grid<int64_t> before = to_grid(init.view());  // a real copy
   const Steps steps = step_schedule(20, 30, Variant::JfaPlus2);
   static_cast<void>(run_steps(init.view(), steps));
   EXPECT_EQ(init, before);
