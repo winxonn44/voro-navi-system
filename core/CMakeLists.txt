@@ -85,7 +85,7 @@ if(VORONAV_BUILD_PYTHON)
 endif()
 
 # The library: headers in include/voronav, sources in src.
-add_library(voronav_core STATIC src/version.cpp)
+add_library(voronav_core STATIC src/jfa.cpp src/oracle.cpp src/version.cpp)
 add_library(voronav::core ALIAS voronav_core)
 target_include_directories(voronav_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_compile_features(voronav_core PUBLIC cxx_std_20)
