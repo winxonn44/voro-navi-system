@@ -19,7 +19,7 @@ CASES = [
 ]
 
 
-@pytest.mark.parametrize("variant", ["jfa", "jfa+1", "1+jfa"])
+@pytest.mark.parametrize("variant", ["jfa", "jfa+1", "jfa+2", "1+jfa"])
 @pytest.mark.parametrize("case", CASES, ids=[c[0] for c in CASES])
 def test_matches_numpy_reference(backend, case, variant):
     sites = case[1]()

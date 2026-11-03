@@ -4,7 +4,7 @@ from voronav.config import MapSourceConfig, load_config, load_q2_config
 
 
 def test_load_shipped_configs():
-    for name in ("debug", "bench_quick", "bench_q1"):
+    for name in ("debug", "bench_quick", "bench_q1", "bench_core_quick"):
         cfg = load_config(f"configs/{name}.yaml")
         assert cfg.bench.sizes
 
@@ -131,3 +131,10 @@ def test_bad_q3_config_rejected(tmp_path, body, match):
     p.write_text(body)
     with pytest.raises(ValueError, match=match):
         load_q3_config(p)
+
+
+def test_cpp_backend_accepted(tmp_path):
+    p = tmp_path / "cpp.yaml"
+    p.write_text("voronoi:\n  backend: cpp\nbench:\n  backends: [numpy, cpp]\n")
+    cfg = load_config(p)
+    assert cfg.voronoi.backend == "cpp" and cfg.bench.backends == ["numpy", "cpp"]

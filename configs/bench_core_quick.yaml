@@ -1,0 +1,21 @@
+# First serial C++ number (checkpoint C2): the C++ core next to NumPy, Numba
+# (1 thread and all 10) and MPS at 256-1024, one variant, one density.
+# Needs the optional core (`pip install -e ./core`). About a minute of mostly
+# single-core load; NumPy at 1024 is the slow part. Results: docs/CORE.md.
+map:
+  kind: points
+
+bench:
+  sizes: [256, 512, 1024]
+  site_densities: [0.001]
+  backends: [numpy, numba, torch, cpp]
+  variants: [jfa+1]
+  numba_threads: [1, 10]
+  numba_schedules: [dynamic]
+  torch_devices: [mps]
+  repeats: 10
+  warmup: 1
+  measure_error: true
+  seed: 0
+  cooldown_s: 0.5
+  out_dir: runs/bench_core_quick
