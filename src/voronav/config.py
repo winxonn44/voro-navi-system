@@ -12,7 +12,7 @@ from typing import Any
 
 import yaml
 
-BACKENDS = ("numpy", "numba", "torch")
+BACKENDS = ("numpy", "numba", "torch", "cpp")  # cpp: the optional C++ core
 VARIANTS = ("jfa", "jfa+1", "jfa+2", "1+jfa")
 NUMBA_SCHEDULES = ("dynamic", "static")
 MAP_KINDS = ("points", "obstacles", "corridor", "movingai", "image")

@@ -36,7 +36,8 @@ def make_runner(
     """Return (run, fetch). `run()` executes JFA and blocks until it is done;
     `fetch()` returns the last result as a numpy array. `schedule` is
     numba-only ("dynamic" or "static" row distribution). `backend="cpp"`
-    needs the optional C++ core (`core/`, see `import_core`)."""
+    needs the optional C++ core (`core/`, see `import_core`) and is serial
+    for now (threads None or 1)."""
     init = init_nearest(sites)
     steps = step_schedule(*sites.shape, variant)
     result: dict[str, object] = {}
@@ -73,10 +74,23 @@ def make_runner(
 
     elif backend == "cpp":
         core = import_core()
-        # C0 ships only the scaffolding; the C++ JFA arrives in checkpoint C1/C2.
-        raise NotImplementedError(
-            f"backend='cpp': voronav-core {core.version()} has no JFA yet"
-        )
+        # Serial only until the thread pool (checkpoint C3): one thread, and
+        # no schedule to choose. threads=1 is accepted because it is what
+        # serial means (bench_jfa.py passes it for the serial backends).
+        if threads not in (None, 1) or schedule != "dynamic":
+            raise ValueError(
+                "backend='cpp' is serial for now: threads must be None or 1 and "
+                f"schedule the default, got threads={threads!r}, schedule={schedule!r}"
+            )
+        if device != "cpu":
+            raise ValueError(f"backend='cpp' runs on the CPU, got device={device!r}")
+
+        def run() -> None:
+            # init is a fresh C-contiguous int64 array, so it crosses zero-copy.
+            result["out"] = core.run_steps(init, steps)
+
+        def fetch() -> np.ndarray:
+            return result["out"]  # type: ignore[return-value]
 
     else:
         raise ValueError(f"unknown backend {backend!r}")

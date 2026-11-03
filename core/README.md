@@ -6,11 +6,13 @@ grid planners, ported from the Python package and callable from it with
 repository, so `pip install -e .` for the main package stays pure Python and
 never needs a compiler.
 
-**Status: checkpoint C1 (serial JFA).** The C++ API has the `Grid` /
+**Status: checkpoint C2 (Python bindings).** The C++ API has the `Grid` /
 `GridView` types, serial JFA (`init_nearest`, `step_schedule`, `run_steps`,
 `distance_sq` in `jfa.hpp`) and the brute-force oracle (`brute_force` in
-`oracle.hpp`), tested in C++ only. Python bindings for them come in C2; until
-then `make_runner(..., backend="cpp")` raises `NotImplementedError`.
+`oracle.hpp`). All five are bound to Python (`voronav_core.<name>`), and
+`make_runner(..., backend="cpp")` runs the serial C++ JFA, bit-identical to
+the NumPy reference (`tests/test_cpp_parity.py`). Threads come in C3; first
+timings are in [docs/CORE.md](../docs/CORE.md).
 
 ## Layout
 
@@ -161,8 +163,25 @@ This is a scikit-build-core editable install: the Python files are used from
 `core/python/voronav_core/`, and the compiled `_core` extension is built once
 into `core/build-py/` and installed into the venv. **After changing any C++,
 run the same `pip install -e ./core` again**; the build directory is kept, so
-the rebuild is incremental. `tests/test_core.py` skips the extension tests
-when `voronav-core` is not installed.
+the rebuild is incremental. `tests/test_core.py` and
+`tests/test_cpp_parity.py` skip when `voronav-core` is not installed, and the
+backend-parametrized tests (`tests/conftest.py`) include `cpp-cpu` only when
+it is.
+
+The JFA bindings take NumPy arrays **without copying**: `sites` must be a
+C-contiguous, aligned 2D `bool` or `uint8` array, `nearest`/`init` a
+C-contiguous, aligned 2D `int64` array. Anything else (a strided slice,
+Fortran order, `int32`, a byte-swapped dtype, a list) raises `ValueError`
+rather than being converted silently; pass `np.ascontiguousarray(a,
+dtype=np.int64)` if you mean to copy. Results are new `int64` arrays that own
+the C++ buffer (the `Grid` is moved into a capsule, no copy). The functions
+release the GIL while they compute.
+
+```python
+import voronav_core as core
+init = core.init_nearest(sites)                        # sites: bool [H, W]
+out = core.run_steps(init, core.step_schedule(*sites.shape, "jfa+2"))
+```
 
 To uninstall: `.venv/bin/pip uninstall voronav-core`.
 

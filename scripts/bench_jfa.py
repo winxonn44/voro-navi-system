@@ -27,7 +27,7 @@ from scipy.ndimage import distance_transform_edt
 
 from voronav.config import BenchConfig, load_config, to_dict
 from voronav.maps import random_sites
-from voronav.voronoi import distance_sq, make_runner, step_schedule
+from voronav.voronoi import distance_sq, import_core, make_runner, step_schedule
 
 
 def machine_info() -> dict:
@@ -50,6 +50,12 @@ def machine_info() -> dict:
         import torch
 
         info["torch"] = torch.__version__
+    except ImportError:
+        pass
+    try:
+        import voronav_core
+
+        info["voronav_core"] = voronav_core.version()
     except ImportError:
         pass
     return info
@@ -97,6 +103,9 @@ def configurations(cfg: BenchConfig):
     for backend in cfg.backends:
         if backend == "numpy":
             yield "numpy", "cpu", 1, None
+        elif backend == "cpp":
+            import_core()  # fail before the sweep, with the install hint, if missing
+            yield "cpp", "cpu", 1, None  # serial until the C3 thread pool
         elif backend == "numba":
             for sch in cfg.numba_schedules:
                 for t in cfg.numba_threads:
