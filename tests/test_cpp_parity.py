@@ -59,6 +59,37 @@ def test_run_steps_matches_numpy_on_random_shapes(seed):
             _assert_same(sites, variant)
 
 
+# The thread pool (checkpoint C3): every thread count, schedule and chunk must
+# give the NumPy result bit for bit. Shapes include fewer rows than threads.
+THREADS = [2, 3, 7, 10, None]
+THREAD_SHAPES = [(1, 1), (1, 37), (41, 1), (3, 50), (12, 13), (33, 31), (64, 64), (97, 131)]
+
+
+@pytest.mark.parametrize("schedule", ["static", "dynamic"])
+@pytest.mark.parametrize("threads", THREADS, ids=lambda t: f"t{t}")
+def test_threaded_run_steps_matches_numpy(threads, schedule):
+    for shape in THREAD_SHAPES:
+        for density in (0.0, 0.01, 0.1, 1.0):
+            sites = _sites(shape, density, seed=3)
+            init = init_nearest(sites)
+            for variant in VARIANTS:
+                steps = step_schedule(*shape, variant)
+                ref = jfa_numpy.run_steps(init, steps)
+                for chunk in (1, 4, 16):
+                    out = core.run_steps(init, steps, threads, schedule, chunk)
+                    assert np.array_equal(out, ref), (shape, density, variant, threads, chunk)
+
+
+def test_threaded_large_grid_matches_numpy():
+    sites = _sites((512, 384), 0.002, seed=4)
+    init = init_nearest(sites)
+    steps = step_schedule(512, 384, "jfa+2")
+    ref = jfa_numpy.run_steps(init, steps)
+    for threads in (4, 10):
+        for schedule in ("static", "dynamic"):
+            assert np.array_equal(core.run_steps(init, steps, threads, schedule), ref)
+
+
 def test_lattice_ties_match_numpy():
     """Many pixels equidistant from 2 or 4 sites: exercises the tie-break."""
     sites = np.zeros((97, 131), dtype=bool)
@@ -89,6 +120,10 @@ def test_pinned_counterexample_is_wrong_identically_in_both_languages(variant):
     py_out = jfa_numpy.run_steps(init_nearest(sites), steps)
     cpp_out = core.run_steps(core.init_nearest(sites), steps)
     assert np.array_equal(cpp_out, py_out)
+    for threads in (2, 7, 10):
+        for schedule in ("static", "dynamic"):
+            par = core.run_steps(core.init_nearest(sites), steps, threads, schedule, 1)
+            assert np.array_equal(par, py_out)
 
     oracle = brute_force(sites)
     assert np.array_equal(core.brute_force(sites), oracle)

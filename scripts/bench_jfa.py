@@ -105,7 +105,12 @@ def configurations(cfg: BenchConfig):
             yield "numpy", "cpu", 1, None
         elif backend == "cpp":
             import_core()  # fail before the sweep, with the install hint, if missing
-            yield "cpp", "cpu", 1, None  # serial until the C3 thread pool
+            for t in cfg.cpp_threads:
+                if t == 1:  # the serial path: no pool, no schedule
+                    yield "cpp", "cpu", 1, None
+                    continue
+                for sch in cfg.cpp_schedules:
+                    yield "cpp", "cpu", t, sch
         elif backend == "numba":
             for sch in cfg.numba_schedules:
                 for t in cfg.numba_threads:
@@ -177,7 +182,7 @@ def main() -> None:
                         f.write(json.dumps(row) + "\n")
                         f.flush()
                         tag = f"{backend}-{device}" + (
-                            f"-{schedule[:3]}-t{threads}" if backend == "numba" else ""
+                            f"-{schedule[:3]}-t{threads}" if schedule else ""
                         )
                         print(
                             f"size={size:5d} sites={n_sites:6d} {variant:6s} {tag:18s} "

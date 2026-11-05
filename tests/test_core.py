@@ -39,18 +39,93 @@ def test_cpp_backend_runs_through_make_runner(core):
 
 @pytest.mark.parametrize(
     "kwargs",
-    [{"threads": 4}, {"threads": 0}, {"schedule": "static"}, {"device": "mps"}],
-    ids=["threads4", "threads0", "static", "mps"],
+    [{"threads": 0}, {"threads": -2}, {"schedule": "guided"}, {"device": "mps"}],
+    ids=["threads0", "threads-2", "guided", "mps"],
 )
-def test_cpp_backend_is_serial_cpu_only_until_c3(core, kwargs):
+def test_cpp_backend_rejects_bad_settings_at_setup(core, kwargs):
     with pytest.raises(ValueError, match="backend='cpp'"):
         make_runner(random_sites(8, 8, 2, seed=0), backend="cpp", **kwargs)
 
 
-def test_cpp_backend_accepts_one_thread(core):
-    run, fetch = make_runner(random_sites(8, 8, 2, seed=0), backend="cpp", threads=1)
+@pytest.mark.parametrize("threads", [None, 1, 3, 10])
+@pytest.mark.parametrize("schedule", ["static", "dynamic"])
+def test_cpp_backend_threads_and_schedule(core, threads, schedule):
+    sites = random_sites(37, 29, 6, seed=1)
+    run, fetch = make_runner(sites, backend="cpp", variant="jfa+2", threads=threads,
+                             schedule=schedule)
     run()
-    assert fetch().shape == (8, 8)
+    ref_run, ref_fetch = make_runner(sites, backend="numpy", variant="jfa+2")
+    ref_run()
+    assert np.array_equal(fetch(), ref_fetch())
+
+
+def test_core_rejects_bad_threads_schedule_chunk(core):
+    init = np.full((4, 5), -1, dtype=np.int64)
+    for kwargs in ({"threads": 0}, {"threads": 1025}, {"schedule": "guided"}, {"chunk": 0}):
+        with pytest.raises(ValueError):
+            core.run_steps(init, [2, 1], **kwargs)
+
+
+def test_pools_are_cached_per_thread_count(core):
+    """One pool per thread count, reused by later calls; threads=1 is the
+    serial path and creates none."""
+    pool_sizes = core._core._pool_sizes
+    init = core.init_nearest(np.eye(16, dtype=bool))
+    steps = core.step_schedule(16, 16, "jfa+1")
+    core.run_steps(init, steps, threads=1)
+    assert 1 not in pool_sizes()
+    for _ in range(20):
+        core.run_steps(init, steps, threads=5, schedule="static")
+        core.run_steps(init, steps, threads=5, schedule="dynamic", chunk=1)
+    assert pool_sizes().count(5) == 1
+    core.run_steps(init, steps, threads=None)
+    assert core.hardware_threads() in pool_sizes() or core.hardware_threads() == 1
+
+
+def test_run_steps_releases_the_gil(core):
+    """While one thread is inside C++ run_steps, another keeps running Python:
+    with the GIL held for the call, the counter below could not advance."""
+    import threading
+
+    init = core.init_nearest(np.eye(1024, dtype=bool))
+    steps = core.step_schedule(1024, 1024, "jfa+2") * 3  # ~0.2 s serial
+    started = threading.Event()
+
+    def work():
+        started.set()
+        core.run_steps(init, steps, threads=1)
+
+    t = threading.Thread(target=work)
+    t.start()
+    started.wait()
+    ticks = 0
+    while t.is_alive():
+        ticks += 1
+    t.join()
+    assert ticks > 1000
+
+
+def test_one_pool_shared_by_concurrent_callers(core):
+    """Four Python threads call the same cached pool at once (the GIL is
+    released, so the calls overlap in C++); every result is still exact."""
+    import threading
+
+    from voronav.voronoi import init_nearest, jfa_numpy, step_schedule
+
+    sites = random_sites(256, 256, 60, seed=2)
+    init, steps = init_nearest(sites), step_schedule(256, 256, "jfa+2")
+    ref = jfa_numpy.run_steps(init, steps)
+    results = [None] * 4
+
+    def work(i):
+        results[i] = core.run_steps(init, steps, threads=4, schedule="dynamic")
+
+    threads = [threading.Thread(target=work, args=(i,)) for i in range(4)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert all(np.array_equal(r, ref) for r in results)
 
 
 @pytest.mark.parametrize("dtype", [bool, np.uint8, np.int64])

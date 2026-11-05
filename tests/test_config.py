@@ -138,3 +138,23 @@ def test_cpp_backend_accepted(tmp_path):
     p.write_text("voronoi:\n  backend: cpp\nbench:\n  backends: [numpy, cpp]\n")
     cfg = load_config(p)
     assert cfg.voronoi.backend == "cpp" and cfg.bench.backends == ["numpy", "cpp"]
+
+
+def test_cpp_threads_and_schedules(tmp_path):
+    p = tmp_path / "cpp.yaml"
+    p.write_text("bench:\n  backends: [cpp]\n  cpp_threads: [1, 4]\n"
+                 "  cpp_schedules: [static, dynamic]\n")
+    cfg = load_config(p)
+    assert cfg.bench.cpp_threads == [1, 4] and cfg.bench.cpp_schedules == ["static", "dynamic"]
+
+
+@pytest.mark.parametrize("body, match", [
+    ("bench:\n  cpp_schedules: [guided]\n", "cpp_schedules"),
+    ("bench:\n  cpp_threads: [0]\n", "thread counts"),
+    ("bench:\n  numba_threads: [-1]\n", "thread counts"),
+])
+def test_bad_cpp_bench_config_rejected(tmp_path, body, match):
+    p = tmp_path / "bad.yaml"
+    p.write_text(body)
+    with pytest.raises(ValueError, match=match):
+        load_config(p)

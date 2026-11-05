@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "voronav/grid.hpp"
+#include "voronav/thread_pool.hpp"
 
 namespace voronav {
 namespace {
@@ -29,14 +30,17 @@ void check_nearest(GridView<const int64_t> nearest, const char* who) {
   }
 }
 
-// One pass with step k: out[y, x] = the best of cur's 3x3 candidates at
-// offsets {-k, 0, k}, by the (d2, site) tie-break documented in jfa.hpp.
-// Mirrors _pixel in jfa_numba.py. All arithmetic is int64: with sides below
-// 2^31, |dy|, |dx| < 2^31, so d2 < 2^63.
-void jfa_pass(GridView<const int64_t> cur, GridView<int64_t> out, int64_t k) noexcept {
+}  // namespace
+
+// out[y, x] = the best of cur's 3x3 candidates at offsets {-k, 0, k}, by the
+// (d2, site) tie-break documented in jfa.hpp, for y in [y0, y1). Mirrors
+// _pixel in jfa_numba.py. All arithmetic is int64: with sides below 2^31,
+// |dy|, |dx| < 2^31, so d2 < 2^63.
+void jfa_pass_rows(GridView<const int64_t> cur, GridView<int64_t> out, int64_t k, int y0,
+                   int y1) noexcept {
   const int64_t h = cur.height;
   const int64_t w = cur.width;
-  for (int64_t y = 0; y < h; ++y) {
+  for (int64_t y = y0; y < y1; ++y) {
     for (int64_t x = 0; x < w; ++x) {
       int64_t best_d2 = kBigD2;
       int64_t best_site = kNoSite;
@@ -68,8 +72,6 @@ void jfa_pass(GridView<const int64_t> cur, GridView<int64_t> out, int64_t k) noe
     }
   }
 }
-
-}  // namespace
 
 Grid<int64_t> init_nearest(GridView<const uint8_t> sites) {
   Grid<int64_t> out(sites.height, sites.width, kNoSite);
@@ -111,13 +113,25 @@ std::vector<int> step_schedule(int height, int width, Variant variant) {
   return steps;
 }
 
-Grid<int64_t> run_steps(GridView<const int64_t> init, std::span<const int> steps) {
+Grid<int64_t> run_steps(GridView<const int64_t> init, std::span<const int> steps, ThreadPool* pool,
+                        Schedule schedule, int chunk) {
   check_nearest(init, "run_steps");
+  if (chunk < 1) {
+    throw std::invalid_argument("run_steps: chunk must be >= 1");
+  }
   Grid<int64_t> cur = to_grid(init);
   Grid<int64_t> nxt(init.height, init.width);
+  const int h = init.height;
   for (const int k : steps) {
-    jfa_pass(cur.view(), nxt.view(), k);
-    std::swap(cur, nxt);
+    const GridView<const int64_t> src = cur.view();
+    const GridView<int64_t> dst = nxt.view();
+    if (pool == nullptr) {
+      jfa_pass_rows(src, dst, k, 0, h);
+    } else {
+      auto rows = [src, dst, k](int y0, int y1) noexcept { jfa_pass_rows(src, dst, k, y0, y1); };
+      pool->parallel_rows(h, schedule, chunk, rows);  // returns after every row is written
+    }
+    std::swap(cur, nxt);  // moves keep the buffers, so views stay valid
   }
   return cur;
 }

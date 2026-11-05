@@ -39,7 +39,7 @@ class VoronoiConfig:
     backend: str = "numpy"
     variant: str = "jfa+1"
     device: str = "cpu"      # torch only: cpu | mps | cuda
-    threads: int | None = None  # numba only; None = all cores
+    threads: int | None = None  # numba and cpp; None = all cores
 
     def __post_init__(self) -> None:
         if self.backend not in BACKENDS:
@@ -58,6 +58,10 @@ class BenchConfig:
     variants: list[str] = field(default_factory=lambda: ["jfa+1"])
     numba_threads: list[int] = field(default_factory=lambda: [1])
     numba_schedules: list[str] = field(default_factory=lambda: ["dynamic"])
+    # The C++ core's thread pool (checkpoint C3). threads=1 is the serial path
+    # (schedule is irrelevant there and is timed once).
+    cpp_threads: list[int] = field(default_factory=lambda: [1])
+    cpp_schedules: list[str] = field(default_factory=lambda: ["dynamic"])
     torch_devices: list[str] = field(default_factory=lambda: ["cpu"])
     repeats: int = 5
     warmup: int = 1
@@ -79,6 +83,12 @@ class BenchConfig:
         for sch in self.numba_schedules:
             if sch not in NUMBA_SCHEDULES:
                 raise ValueError(f"bench.numba_schedules: unknown schedule {sch!r}")
+        for sch in self.cpp_schedules:
+            if sch not in NUMBA_SCHEDULES:
+                raise ValueError(f"bench.cpp_schedules: unknown schedule {sch!r}")
+        for t in [*self.numba_threads, *self.cpp_threads]:
+            if t < 1:
+                raise ValueError(f"bench thread counts must be >= 1, got {t}")
         if self.repeats < 1:
             raise ValueError("bench.repeats must be >= 1")
         if self.cooldown_s < 0:
