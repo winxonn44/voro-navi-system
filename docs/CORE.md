@@ -79,7 +79,7 @@ Numba's, so read it as a tie, not a loss. Making C++ faster is checkpoint C4
 ## Thread pool (checkpoint C3, 2026-11-02)
 
 `voronav::ThreadPool` (`core/include/voronav/thread_pool.hpp`) is a fixed set
-of `std::jthread` workers created once and reused for every pass;
+of `std::thread` workers created once and reused for every pass;
 `run_steps(init, steps, pool, schedule, chunk)` splits each pass over it by
 rows. `ThreadPool(n)` spawns `n − 1` workers and the calling thread is the
 `n`-th. The two schedules mirror the Numba backend: **static** gives
@@ -144,7 +144,7 @@ microseconds. `core/bench/bench_pool.cpp` measures it two ways:
 `BM_EmptyPass*` times one pass with no work (the fixed cost of starting and
 finishing a parallel pass), and `BM_Jfa*` runs a full `jfa+2` `run_steps`
 (1% sites, static schedule) with the pool or with a benchmark-only driver
-that creates and joins `n − 1` `std::jthread`s around every pass, using the
+that creates and joins `n − 1` `std::thread`s around every pass, using the
 same kernel (`jfa_pass_rows`). Wall-clock medians of 5 repetitions:
 
 | Threads | Empty pass, pool | Empty pass, spawn | Spawn − pool |

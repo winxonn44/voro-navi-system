@@ -46,7 +46,7 @@ built by hatchling and should not depend on a compiled file inside it.
   v1.9.4 and pybind11 v3.0.1 are fetched with CMake `FetchContent` at pinned
   tags.
 
-No OpenMP: Apple Clang does not ship it. Threads will use `std::jthread`.
+No OpenMP: Apple Clang does not ship it. Threads use `std::thread` (Xcode 15's libc++ has no `std::jthread`).
 
 ## Build and test the C++ alone
 

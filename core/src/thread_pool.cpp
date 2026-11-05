@@ -5,7 +5,6 @@
 #include <cstdint>
 #include <mutex>
 #include <stdexcept>
-#include <stop_token>
 #include <thread>
 
 namespace voronav {
@@ -16,19 +15,19 @@ ThreadPool::ThreadPool(unsigned n_threads) : n_threads_(n_threads) {
   }
   workers_.reserve(n_threads - 1);
   for (unsigned i = 1; i < n_threads; ++i) {
-    workers_.emplace_back([this, i](const std::stop_token& stop) { worker_loop(stop, i); });
+    workers_.emplace_back([this, i] { worker_loop(i); });
   }
 }
 
 ThreadPool::~ThreadPool() {
-  for (auto& w : workers_) {
-    w.request_stop();
-  }
-  // The stop request happens-before a worker's acquire load of the new
-  // generation, so a worker woken here sees stop_requested() == true.
+  // Published by the release bump: a worker's acquire load of the new
+  // generation happens-after this store, so it sees stopping_ == true.
+  stopping_ = true;
   generation_.fetch_add(1, std::memory_order_release);
   generation_.notify_all();
-  workers_.clear();  // joins
+  for (auto& w : workers_) {
+    w.join();
+  }
 }
 
 void ThreadPool::run(int rows, Schedule schedule, int chunk, RowFn fn, void* ctx) {
@@ -64,7 +63,7 @@ void ThreadPool::run(int rows, Schedule schedule, int chunk, RowFn fn, void* ctx
   }
 }
 
-void ThreadPool::worker_loop(const std::stop_token& stop, unsigned index) noexcept {
+void ThreadPool::worker_loop(unsigned index) noexcept {
   // Not generation_.load(): the caller may already have published the first
   // job before this thread got here, and loading would skip it. Every worker
   // starts from the constructor's value, 0.
@@ -72,7 +71,7 @@ void ThreadPool::worker_loop(const std::stop_token& stop, unsigned index) noexce
   for (;;) {
     generation_.wait(seen, std::memory_order_acquire);  // returns once it differs
     seen = generation_.load(std::memory_order_acquire);
-    if (stop.stop_requested()) {
+    if (stopping_) {
       return;
     }
     do_share(index);

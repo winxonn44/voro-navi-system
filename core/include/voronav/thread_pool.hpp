@@ -6,7 +6,7 @@
 // one atomic increment plus a wake-up per sleeping worker, instead of
 // creating and joining threads (measured in docs/CORE.md).
 //
-// Participants: ThreadPool(n) spawns n - 1 std::jthread workers; the thread
+// Participants: ThreadPool(n) spawns n - 1 std::thread workers; the thread
 // that calls parallel_rows is participant 0 and works too, so n threads
 // compute and ThreadPool(1) runs everything on the caller.
 //
@@ -32,6 +32,8 @@
 //     The fetch_subs form one release sequence, so every worker's writes to
 //     the output buffer happen-before the caller returns, and therefore
 //     before run_steps swaps the buffers and starts the next pass.
+//   stop: ~ThreadPool sets stopping_ and bumps generation_ the same way, so
+//     a woken worker sees the flag, returns, and is joined.
 //   idle: workers sleep in atomic::wait (futex on Linux, ulock on macOS).
 //     The library may spin briefly before sleeping; an idle pool uses no CPU.
 //
@@ -43,12 +45,16 @@
 // parallel_rows is serialized by an internal mutex: two threads may share
 // one pool (for example two Python threads with the GIL released), and each
 // call then runs alone. fn must not throw (checked at compile time).
+//
+// Plain std::thread, not std::jthread / std::stop_token: Xcode 15's libc++
+// (GitHub's macos-14 runners) does not provide those two, and the pool needs
+// its own wake-up for stopping anyway (a stop_token cannot wake an
+// atomic::wait).
 
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <mutex>
-#include <stop_token>
 #include <thread>
 #include <type_traits>
 #include <vector>
@@ -95,7 +101,7 @@ class ThreadPool {
   }
 
   void run(int rows, Schedule schedule, int chunk, RowFn fn, void* ctx);
-  void worker_loop(const std::stop_token& stop, unsigned index) noexcept;
+  void worker_loop(unsigned index) noexcept;
   void do_share(unsigned index) noexcept;
 
   static constexpr std::size_t kLine = 128;
@@ -110,13 +116,14 @@ class ThreadPool {
   int rows_ = 0;
   int chunk_ = 1;
   Schedule schedule_ = Schedule::Dynamic;
+  bool stopping_ = false;  // set by ~ThreadPool, published like the job fields
 
   alignas(kLine) std::atomic<std::uint32_t> generation_{0};  // bumped per job and on stop
   alignas(kLine) std::atomic<std::int64_t> next_row_{0};     // dynamic: next unclaimed row
   alignas(kLine) std::atomic<std::int32_t> pending_{0};      // workers still running the job
 
-  // Declared last: joined in ~ThreadPool before the atomics above are gone.
-  alignas(kLine) std::vector<std::jthread> workers_;
+  // Joined in ~ThreadPool, before any member above is destroyed.
+  alignas(kLine) std::vector<std::thread> workers_;
 };
 
 }  // namespace voronav

@@ -29,7 +29,7 @@ using voronav::Grid;
 using voronav::GridView;
 
 // The benchmark-only alternative to ThreadPool: create threads - 1
-// std::jthreads for this one pass, run participant 0 on the caller, join.
+// std::threads for this one pass, run participant 0 on the caller, join.
 // Static blocks, exactly as ThreadPool's Static schedule.
 template <typename Fn>
 void spawn_rows(unsigned threads, int rows, const Fn& fn) {
@@ -40,13 +40,16 @@ void spawn_rows(unsigned threads, int rows, const Fn& fn) {
       fn(static_cast<int>(b), static_cast<int>(e));
     }
   };
-  std::vector<std::jthread> workers;
+  std::vector<std::thread> workers;
   workers.reserve(threads - 1);
   for (unsigned i = 1; i < threads; ++i) {
     workers.emplace_back(share, i);
   }
   share(0);
-}  // ~jthread joins
+  for (auto& w : workers) {
+    w.join();
+  }
+}
 
 void BM_EmptyPassPool(benchmark::State& state) {
   const auto threads = static_cast<unsigned>(state.range(0));
