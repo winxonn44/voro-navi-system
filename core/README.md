@@ -6,13 +6,17 @@ grid planners, ported from the Python package and callable from it with
 repository, so `pip install -e .` for the main package stays pure Python and
 never needs a compiler.
 
-**Status: checkpoint C2 (Python bindings).** The C++ API has the `Grid` /
-`GridView` types, serial JFA (`init_nearest`, `step_schedule`, `run_steps`,
-`distance_sq` in `jfa.hpp`) and the brute-force oracle (`brute_force` in
-`oracle.hpp`). All five are bound to Python (`voronav_core.<name>`), and
-`make_runner(..., backend="cpp")` runs the serial C++ JFA, bit-identical to
-the NumPy reference (`tests/test_cpp_parity.py`). Threads come in C3; first
-timings are in [docs/CORE.md](../docs/CORE.md).
+**Status: checkpoint C3 (thread pool).** The C++ API has the `Grid` /
+`GridView` types, JFA (`init_nearest`, `step_schedule`, `run_steps`,
+`distance_sq` in `jfa.hpp`), the brute-force oracle (`brute_force` in
+`oracle.hpp`) and a reusable `ThreadPool` with static and dynamic row
+schedules (`thread_pool.hpp`). `run_steps(init, steps, pool, schedule,
+chunk)` is serial with `pool == nullptr` and gives the same bits for every
+thread count, schedule and chunk. All of it is bound to Python
+(`voronav_core.<name>`), and `make_runner(..., backend="cpp", threads=...,
+schedule=...)` runs it, bit-identical to the NumPy reference
+(`tests/test_cpp_parity.py`). Timings, pool overhead and strong scaling are
+in [docs/CORE.md](../docs/CORE.md).
 
 ## Layout
 
@@ -20,7 +24,7 @@ timings are in [docs/CORE.md](../docs/CORE.md).
 core/
 ├── CMakeLists.txt          # library, tests, benchmarks, Python module
 ├── pyproject.toml          # scikit-build-core; distribution "voronav-core"
-├── include/voronav/        # public headers: grid.hpp, jfa.hpp, oracle.hpp, version.hpp
+├── include/voronav/        # public headers: grid.hpp, jfa.hpp, oracle.hpp, thread_pool.hpp, version.hpp
 ├── src/                    # .cpp files matching the headers
 ├── tests/                  # GoogleTest (ctest)
 ├── bench/                  # Google Benchmark
@@ -42,7 +46,7 @@ built by hatchling and should not depend on a compiled file inside it.
   v1.9.4 and pybind11 v3.0.1 are fetched with CMake `FetchContent` at pinned
   tags.
 
-No OpenMP: Apple Clang does not ship it. Threads will use `std::jthread`.
+No OpenMP: Apple Clang does not ship it. Threads use `std::thread` (Xcode 15's libc++ has no `std::jthread`).
 
 ## Build and test the C++ alone
 
@@ -180,8 +184,15 @@ release the GIL while they compute.
 ```python
 import voronav_core as core
 init = core.init_nearest(sites)                        # sites: bool [H, W]
-out = core.run_steps(init, core.step_schedule(*sites.shape, "jfa+2"))
+steps = core.step_schedule(*sites.shape, "jfa+2")
+out = core.run_steps(init, steps)                      # serial
+out = core.run_steps(init, steps, threads=8, schedule="dynamic", chunk=4)  # same bits
 ```
+
+`threads=1` (the default) is the serial path; `threads=n` uses a pool of `n`
+threads that the module creates on first use and keeps for later calls (one
+per thread count); `threads=None` uses `core.hardware_threads()`. In
+`make_runner`, `threads=None` means all cores, as for Numba.
 
 To uninstall: `.venv/bin/pip uninstall voronav-core`.
 

@@ -11,6 +11,14 @@
 //        capsule that frees it, so the result array uses the Grid's buffer.
 // The JFA functions release the GIL while they compute; the input arrays stay
 // alive because the caller holds references to them for the whole call.
+//
+// Threads: run_steps(..., threads=n) runs on a voronav::ThreadPool of n
+// threads that is created on first use and cached in this module for the
+// life of the process, one per thread count, so passes and calls reuse the
+// same workers. The cache is only touched with the GIL held, which
+// serializes it; the pool itself serializes concurrent run_steps calls.
+// After fork() the child has none of the parent's worker threads, so the
+// child forgets (leaks) the cached pools and builds new ones on demand.
 
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
@@ -18,16 +26,22 @@
 
 #include <climits>
 #include <cstdint>
+#include <map>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
 #include "voronav/grid.hpp"
 #include "voronav/jfa.hpp"
 #include "voronav/oracle.hpp"
+#include "voronav/thread_pool.hpp"
 #include "voronav/version.hpp"
+
+#include <pthread.h>
 
 namespace py = pybind11;
 
@@ -123,6 +137,59 @@ voronav::Variant parse_variant(const std::string& name) {
                               name + "'");
 }
 
+voronav::Schedule parse_schedule(const std::string& name) {
+  if (name == "static") {
+    return voronav::Schedule::Static;
+  }
+  if (name == "dynamic") {
+    return voronav::Schedule::Dynamic;
+  }
+  throw std::invalid_argument("schedule must be 'static' or 'dynamic', got '" + name + "'");
+}
+
+constexpr int kMaxThreads = 1024;
+
+unsigned hardware_threads() {
+  const unsigned n = std::thread::hardware_concurrency();
+  return n == 0 ? 1 : n;
+}
+
+// threads=None means every hardware thread, as in the Numba backend.
+unsigned resolve_threads(const std::optional<int>& threads) {
+  if (!threads) {
+    return hardware_threads();
+  }
+  if (*threads < 1 || *threads > kMaxThreads) {
+    throw std::invalid_argument("threads must be in [1, " + std::to_string(kMaxThreads) +
+                                "] or None, got " + std::to_string(*threads));
+  }
+  return static_cast<unsigned>(*threads);
+}
+
+using PoolCache = std::map<unsigned, std::unique_ptr<voronav::ThreadPool>>;
+PoolCache* g_pools = nullptr;  // never destroyed: workers may outlive interpreter teardown
+
+// The cached pool for n threads (GIL held). n == 1 is the serial path and
+// needs no pool.
+voronav::ThreadPool* pool_for(unsigned n) {
+  if (n == 1) {
+    return nullptr;
+  }
+  if (g_pools == nullptr) {
+    g_pools = new PoolCache;
+  }
+  auto& slot = (*g_pools)[n];
+  if (!slot) {
+    slot = std::make_unique<voronav::ThreadPool>(n);
+  }
+  return slot.get();
+}
+
+// pthread_atfork child handler: the child has only the forking thread, so
+// the cached pools' workers are gone and joining them would hang. Drop the
+// cache without running any destructor.
+void forget_pools_after_fork() { g_pools = nullptr; }
+
 py::array_t<int64_t> to_numpy(voronav::Grid<int64_t>&& grid) {
   auto owner = std::make_unique<voronav::Grid<int64_t>>(std::move(grid));
   const py::ssize_t h = owner->height();
@@ -149,7 +216,8 @@ py::array_t<int64_t> compute(Fn&& fn) {
 }  // namespace
 
 PYBIND11_MODULE(_core, m) {
-  m.doc() = "voronav C++ core: serial JFA, the brute-force oracle, Grid round-trip.";
+  m.doc() = "voronav C++ core: JFA (serial or on a thread pool), the brute-force oracle.";
+  pthread_atfork(nullptr, nullptr, &forget_pools_after_fork);
 
   m.def(
       "version", [] { return std::string(voronav::version()); },
@@ -210,14 +278,41 @@ PYBIND11_MODULE(_core, m) {
 
   m.def(
       "run_steps",
-      [](const py::object& init, const std::vector<int>& steps) {
+      [](const py::object& init, const std::vector<int>& steps, const std::optional<int>& threads,
+         const std::string& schedule, int chunk) {
         const auto v = strict_int64_view(init, "run_steps");
-        return compute([v, &steps] { return voronav::run_steps(v, steps); });
+        const voronav::Schedule sch = parse_schedule(schedule);
+        voronav::ThreadPool* pool = pool_for(resolve_threads(threads));  // GIL held
+        return compute([v, &steps, pool, sch, chunk] {
+          return voronav::run_steps(v, steps, pool, sch, chunk);
+        });
       },
-      py::arg("init"), py::arg("steps"),
-      "Serial JFA: one double-buffered pass per step, bit-identical to "
-      "jfa_numpy.run_steps. init: C-contiguous int64 [H, W] of -1 or flat "
-      "site indices. Returns a new int64 [H, W] array.");
+      py::arg("init"), py::arg("steps"), py::arg("threads") = 1, py::arg("schedule") = "dynamic",
+      py::arg("chunk") = voronav::kDefaultChunk,
+      "JFA: one double-buffered pass per step, bit-identical to "
+      "jfa_numpy.run_steps for every threads/schedule/chunk. init: "
+      "C-contiguous int64 [H, W] of -1 or flat site indices. threads: 1 "
+      "(serial, the default), n > 1 (a cached pool of n threads), or None "
+      "(all hardware threads). schedule: 'dynamic' (rows claimed `chunk` at "
+      "a time from a shared counter) or 'static' (equal contiguous blocks). "
+      "Returns a new int64 [H, W] array.");
+
+  m.def("hardware_threads", &hardware_threads,
+        "std::thread::hardware_concurrency() (at least 1): what threads=None uses.");
+
+  m.def(
+      "_pool_sizes",
+      [] {
+        std::vector<unsigned> sizes;
+        if (g_pools != nullptr) {
+          for (const auto& [n, pool] : *g_pools) {
+            sizes.push_back(n);
+          }
+        }
+        return sizes;
+      },
+      "Thread counts with a cached pool (for tests: pools are reused, not "
+      "created per call).");
 
   m.def(
       "distance_sq",

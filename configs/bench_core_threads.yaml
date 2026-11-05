@@ -1,0 +1,23 @@
+# Strong scaling of the C++ thread pool (checkpoint C3) next to Numba, both
+# with static and dynamic row schedules, at 1-10 threads on the 4P + 6E M4.
+# Needs the optional core (`pip install -e ./core`). About two minutes of
+# load; 2048^2 is most of it. Error is backend-independent and skipped here.
+# Results: docs/CORE.md ("Strong scaling").
+map:
+  kind: points
+
+bench:
+  sizes: [1024, 2048]
+  site_densities: [0.001]
+  backends: [cpp, numba]
+  variants: [jfa+1]
+  cpp_threads: [1, 2, 4, 6, 8, 10]
+  cpp_schedules: [static, dynamic]
+  numba_threads: [1, 2, 4, 6, 8, 10]
+  numba_schedules: [static, dynamic]
+  repeats: 10
+  warmup: 1
+  measure_error: false
+  seed: 0
+  cooldown_s: 1.0
+  out_dir: runs/bench_core_threads
