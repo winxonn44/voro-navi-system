@@ -306,6 +306,8 @@ TEST(ThreadPool, UserInteractiveQosReachesTheWorkersOnly) {
       qos_class_t c = QOS_CLASS_UNSPECIFIED;
       static_cast<void>(pthread_get_qos_class_np(pthread_self(), &c, nullptr));
       qos[static_cast<std::size_t>(r)] = static_cast<int>(c);
+#else
+      static_cast<void>(qos);  // only read on Apple; keeps -Wunused-lambda-capture quiet
 #endif
     }
   };

@@ -213,7 +213,8 @@ TEST(Kernels, PackedAtItsSizeLimit) {
   const Grid<int64_t> init = init_nearest(one.view());
   const Grid<int64_t> out = run_steps(init.view(), step_schedule(1, kPackedMaxSide, Variant::Jfa),
                                       nullptr, Schedule::Dynamic, kDefaultChunk, Kernel::Packed);
-  for (const int64_t s : out.view().flat()) {
+  const auto out_view = out.view();  // named: GCC flags a temporary's span as dangling
+  for (const int64_t s : out_view.flat()) {
     ASSERT_EQ(s, kPackedMaxSide - 1);
   }
 }
@@ -309,7 +310,8 @@ TEST(Kernels, UninitializedGridHasTheShapeAndIsWritable) {
   EXPECT_THROW(Grid<int32_t>(-1, 2, kUninitialized), std::invalid_argument);
   // The filling constructor still fills with the new allocator.
   const Grid<int64_t> filled(4, 4, 7);
-  for (const int64_t v : filled.view().flat()) {
+  const auto filled_view = filled.view();
+  for (const int64_t v : filled_view.flat()) {
     EXPECT_EQ(v, 7);
   }
 }
