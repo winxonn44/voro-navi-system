@@ -131,6 +131,33 @@ choice made in Q2 by whether the residual error changes paths.
 Caveats: one seed, one machine, and laptop timings are sensitive to thermal
 throttling and background load.
 
+## C++ core (voronav-core, checkpoint C4)
+
+`core/` is a C++20 port of the JFA engine (pybind11, GoogleTest, Google
+Benchmark; CI on macOS and Linux with ASan/UBSan and TSan), selected with
+`backend="cpp"`. Its output is **bit-identical to the NumPy reference**:
+`np.array_equal` on the site indices for every shape, density, variant,
+thread count, schedule and kernel tested. The pinned 12 × 13 grid where
+`jfa+2` is wrong comes out identically wrong in every backend.
+
+Measured in one session on the M4 MacBook Air (on AC power, median of 20
+runs; `jfa+1`, 0.1% sites, all passes):
+
+| Grid | NumPy | Numba, 10 threads | **C++, 10 threads** | PyTorch MPS (GPU) |
+| --- | --- | --- | --- | --- |
+| 1024² | 783 ms | 15.4 ms | **5.1 ms** | 5.0 ms |
+| 2048² | 3,931 ms | 64.2 ms | **19.1 ms** | 14.3 ms |
+| 4096² | – | 281.9 ms | **81.7 ms** | 60.3 ms |
+
+On this machine the C++ core is **3.4× faster than multithreaded Numba** at
+2048² (2.8–3.7× across 1024²–4096², both `jfa+1` and `jfa+2`, 0.1% and 1%
+sites). It is 17× faster than the first serial C++ port, mostly from a
+division-free int16 (y, x) layout that Clang vectorizes and a lock-free
+dynamic row scheduler that suits the 4P + 6E cores. It does not beat the GPU on large grids: the
+fused Metal kernel is 1.33–1.36× faster at 2048² and 4096² (they tie at
+1024²). The optimization log (six hypotheses tested one at a time, the ones that
+did not pay off included, with flame graphs) is in [docs/CORE.md](docs/CORE.md).
+
 ## Q2 results: Voronoi roadmap vs A*, weighted A* and RRT*
 
 `configs/bench_q2.yaml` as committed: **94 maps** (20 random-obstacle maps at
@@ -571,8 +598,8 @@ python3 -m venv .venv && .venv/bin/pip install -e ".[dev,torch]"
 .venv/bin/python scripts/plan_demo.py --out docs/q2                     # ~2 s
 ```
 
-**Optional C++ core.** `core/` holds a C++20 port in progress, packaged
-separately so the install above never needs a compiler. With CMake and Ninja
+**Optional C++ core.** `core/` holds the C++20 port (see "C++ core"
+above), packaged separately so the install above never needs a compiler. With CMake and Ninja
 installed, `.venv/bin/pip install -e ./core` adds it; see
 [`core/README.md`](core/README.md).
 

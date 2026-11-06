@@ -1,6 +1,6 @@
 include(GoogleTest)
 
-add_executable(core_tests test_grid.cpp test_jfa.cpp test_oracle.cpp test_parallel.cpp
+add_executable(core_tests test_grid.cpp test_jfa.cpp test_kernels.cpp test_oracle.cpp test_parallel.cpp
                           test_thread_pool.cpp test_version.cpp)
 target_link_libraries(core_tests PRIVATE voronav::core voronav_warnings GTest::gtest_main)
 target_compile_definitions(core_tests PRIVATE

@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="155" font-family="Menlo,monospace" font-size="11">
+<rect width="100%" height="100%" fill="#fdfdf6"/>
+<text x="10" y="20" font-size="14">H6 final kernel (packed + SIMD, pooled checks, no zero-fill), serial, 2048^2 jfa+1 0.1%</text>
+<text x="10" y="34" fill="#555">3993 samples; width = share of samples under the benchmark loop</text>
+<g><title>run_steps (100.0%)</title><rect x="10.0" y="108" width="1180.0" height="16" fill="rgb(222,160,85)" rx="2"/>
+<text x="13.0" y="120">run_steps (100.0%)</text>
+</g>
+<g><title>check_nearest (1.0%)</title><rect x="10.3" y="91" width="11.8" height="16" fill="rgb(224,168,89)" rx="2"/>
+</g>
+<g><title>from_packed_rows (1.2%)</title><rect x="22.1" y="91" width="14.2" height="16" fill="rgb(215,132,71)" rx="2"/>
+</g>
+<g><title>pass_rows_packed (97.0%)</title><rect x="36.3" y="91" width="1144.8" height="16" fill="rgb(217,138,74)" rx="2"/>
+<text x="39.3" y="103">pass_rows_packed (97.0%)</text>
+</g>
+<g><title>packed_segment&lt;false, true&gt; (5.9%)</title><rect x="36.3" y="74" width="69.2" height="16" fill="rgb(222,160,85)" rx="2"/>
+<text x="39.3" y="86">packed_s..</text>
+</g>
+<g><title>packed_segment&lt;true, false&gt; (6.0%)</title><rect x="105.5" y="74" width="70.9" height="16" fill="rgb(222,160,85)" rx="2"/>
+<text x="108.5" y="86">packed_s..</text>
+</g>
+<g><title>packed_segment&lt;true, true&gt; (85.1%)</title><rect x="176.4" y="74" width="1004.8" height="16" fill="rgb(205,90,50)" rx="2"/>
+<text x="179.4" y="86">packed_segment&lt;true, true&gt; (85.1%)</text>
+</g>
+<g><title>to_packed_rows (0.8%)</title><rect x="1181.1" y="91" width="8.9" height="16" fill="rgb(211,114,62)" rx="2"/>
+</g>
+</svg>

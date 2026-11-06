@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="206" font-family="Menlo,monospace" font-size="11">
+<rect width="100%" height="100%" fill="#fdfdf6"/>
+<text x="10" y="20" font-size="14">H6 final kernel, 10 threads dynamic chunk 4, 2048^2 jfa+1 0.1% (all threads)</text>
+<text x="10" y="34" fill="#555">41360 samples; width = share of samples under the benchmark loop</text>
+<g><title>ThreadPool::worker_loop (90.0%)</title><rect x="10.0" y="159" width="1062.3" height="16" fill="rgb(209,108,59)" rx="2"/>
+<text x="13.0" y="171">ThreadPool::worker_loop (90.0%)</text>
+</g>
+<g><title>ThreadPool::call&lt;check_nearest(GridView&lt;long long const&gt;, char const*, ThreadPool*, Schedule, int)::$_0&gt; (1.5%)</title><rect x="10.0" y="142" width="17.9" height="16" fill="rgb(213,122,66)" rx="2"/>
+</g>
+<g><title>from_packed_rows (2.8%)</title><rect x="27.9" y="142" width="32.7" height="16" fill="rgb(215,132,71)" rx="2"/>
+<text x="30.9" y="154">fr..</text>
+</g>
+<g><title>pass_rows_packed (61.0%)</title><rect x="60.6" y="142" width="719.4" height="16" fill="rgb(217,138,74)" rx="2"/>
+<text x="63.6" y="154">pass_rows_packed (61.0%)</text>
+</g>
+<g><title>packed_segment&lt;false, true&gt; (4.2%)</title><rect x="60.6" y="125" width="49.3" height="16" fill="rgb(222,160,85)" rx="2"/>
+<text x="63.6" y="137">packe..</text>
+</g>
+<g><title>packed_segment&lt;true, false&gt; (3.5%)</title><rect x="109.9" y="125" width="41.0" height="16" fill="rgb(222,160,85)" rx="2"/>
+<text x="112.9" y="137">pack..</text>
+</g>
+<g><title>packed_segment&lt;true, true&gt; (53.2%)</title><rect x="150.9" y="125" width="627.6" height="16" fill="rgb(205,90,50)" rx="2"/>
+<text x="153.9" y="137">packed_segment&lt;true, true&gt; (53.2%)</text>
+</g>
+<g><title>std::__cxx_atomic_notify_one (0.1%)</title><rect x="780.0" y="142" width="0.6" height="16" fill="rgb(207,100,55)" rx="2"/>
+</g>
+<g><title>__ulock_wake (0.0%)</title><rect x="780.0" y="125" width="0.5" height="16" fill="rgb(210,112,61)" rx="2"/>
+</g>
+<g><title>std::__libcpp_thread_poll_with_backoff[abi:ne200100]&lt;std::__atomic_wait_unless[abi:ne200100]&lt;std::__atomic_base&lt;unsigned int, false&gt;, std::__atomic_wait[abi:ne200100]&lt;std::__atomic_wait_unless[abi:ne200100] const, unsigned int&gt;(std::__atomic_wait_unless[abi:ne200100] const&amp;, unsigned int, std::memory_order)::{lambda(unsigned int const&amp;)#1}&gt;(std::__atomic_wait const&amp;, std::__atomic_base&lt;unsigned int, false&gt;, std::__atomic_wait_unless[abi:ne200100] const&amp;&amp;)::{lambda()#1}, std::__atomic_wait_backoff_impl&lt;std::__atomic_wait_unless[abi:ne200100], std::memory_order&gt;&amp;&gt; (23.2%)</title><rect x="780.6" y="142" width="273.9" height="16" fill="rgb(223,162,86)" rx="2"/>
+<text x="783.6" y="154">std::__libcpp_thread_poll_with_backoff[..</text>
+</g>
+<g><title>std::__libcpp_atomic_wait (22.0%)</title><rect x="780.6" y="125" width="259.8" height="16" fill="rgb(212,120,65)" rx="2"/>
+<text x="783.6" y="137">std::__libcpp_atomic_wait (22.0%)</text>
+</g>
+<g><title>__ulock_wait (22.0%)</title><rect x="780.6" y="108" width="259.7" height="16" fill="rgb(217,138,74)" rx="2"/>
+<text x="783.6" y="120">__ulock_wait (22.0%)</text>
+</g>
+<g><title>std::chrono::steady_clock::now (1.1%)</title><rect x="1040.4" y="125" width="13.6" height="16" fill="rgb(213,124,67)" rx="2"/>
+</g>
+<g><title>clock_gettime (1.1%)</title><rect x="1040.4" y="108" width="13.3" height="16" fill="rgb(210,110,60)" rx="2"/>
+</g>
+<g><title>clock_gettime_nsec_np (0.9%)</title><rect x="1040.4" y="91" width="11.1" height="16" fill="rgb(208,104,57)" rx="2"/>
+</g>
+<g><title>mach_continuous_time (0.9%)</title><rect x="1040.6" y="74" width="10.4" height="16" fill="rgb(215,132,71)" rx="2"/>
+</g>
+<g><title>to_packed_rows (1.5%)</title><rect x="1054.4" y="142" width="17.4" height="16" fill="rgb(211,114,62)" rx="2"/>
+</g>
+<g><title>run_steps (10.0%)</title><rect x="1072.3" y="159" width="117.7" height="16" fill="rgb(222,160,85)" rx="2"/>
+<text x="1075.3" y="171">run_steps (10.0%)</text>
+</g>
+<g><title>ThreadPool::run (9.8%)</title><rect x="1072.4" y="142" width="115.4" height="16" fill="rgb(218,144,77)" rx="2"/>
+<text x="1075.4" y="154">ThreadPool::run..</text>
+</g>
+<g><title>from_packed_rows (0.3%)</title><rect x="1072.4" y="125" width="3.3" height="16" fill="rgb(215,132,71)" rx="2"/>
+</g>
+<g><title>pass_rows_packed (5.9%)</title><rect x="1075.7" y="125" width="69.2" height="16" fill="rgb(217,138,74)" rx="2"/>
+<text x="1078.7" y="137">pass_row..</text>
+</g>
+<g><title>packed_segment&lt;false, true&gt; (0.4%)</title><rect x="1075.7" y="108" width="4.8" height="16" fill="rgb(222,160,85)" rx="2"/>
+</g>
+<g><title>packed_segment&lt;true, false&gt; (0.3%)</title><rect x="1080.5" y="108" width="3.5" height="16" fill="rgb(222,160,85)" rx="2"/>
+</g>
+<g><title>packed_segment&lt;true, true&gt; (5.2%)</title><rect x="1084.0" y="108" width="60.8" height="16" fill="rgb(205,90,50)" rx="2"/>
+<text x="1087.0" y="120">packed_..</text>
+</g>
+<g><title>std::__cxx_atomic_notify_all (0.5%)</title><rect x="1144.9" y="125" width="5.6" height="16" fill="rgb(223,162,86)" rx="2"/>
+</g>
+<g><title>__ulock_wake (0.5%)</title><rect x="1144.9" y="108" width="5.6" height="16" fill="rgb(210,112,61)" rx="2"/>
+</g>
+<g><title>std::__libcpp_thread_poll_with_backoff[abi:ne200100]&lt;std::__atomic_wait_unless[abi:ne200100]&lt;std::__atomic_base&lt;unsigned int, false&gt;, std::__atomic_wait[abi:ne200100]&lt;std::__atomic_wait_unless[abi:ne200100] const, unsigned int&gt;(std::__atomic_wait_unless[abi:ne200100] const&amp;, unsigned int, std::memory_order)::{lambda(unsigned int const&amp;)#1}&gt;(std::__atomic_wait const&amp;, std::__atomic_base&lt;unsigned int, false&gt;, std::__atomic_wait_unless[abi:ne200100] const&amp;&amp;)::{lambda()#1}, std::__atomic_wait_backoff_impl&lt;std::__atomic_wait_unless[abi:ne200100], std::memory_order&gt;&amp;&gt; (3.0%)</title><rect x="1150.5" y="125" width="35.1" height="16" fill="rgb(223,162,86)" rx="2"/>
+<text x="1153.5" y="137">std..</text>
+</g>
+<g><title>std::__libcpp_atomic_wait (2.6%)</title><rect x="1150.5" y="108" width="30.7" height="16" fill="rgb(212,120,65)" rx="2"/>
+<text x="1153.5" y="120">st..</text>
+</g>
+<g><title>__ulock_wait (2.6%)</title><rect x="1150.5" y="91" width="30.7" height="16" fill="rgb(217,138,74)" rx="2"/>
+<text x="1153.5" y="103">__..</text>
+</g>
+<g><title>std::chrono::steady_clock::now (0.3%)</title><rect x="1181.1" y="108" width="4.1" height="16" fill="rgb(213,124,67)" rx="2"/>
+</g>
+<g><title>clock_gettime (0.3%)</title><rect x="1181.1" y="91" width="4.0" height="16" fill="rgb(210,110,60)" rx="2"/>
+</g>
+<g><title>clock_gettime_nsec_np (0.3%)</title><rect x="1181.1" y="74" width="3.4" height="16" fill="rgb(208,104,57)" rx="2"/>
+</g>
+<g><title>mach_continuous_time (0.3%)</title><rect x="1181.2" y="57" width="3.0" height="16" fill="rgb(215,132,71)" rx="2"/>
+</g>
+<g><title>to_packed_rows (0.2%)</title><rect x="1185.6" y="125" width="2.1" height="16" fill="rgb(211,114,62)" rx="2"/>
+</g>
+<g><title>check_nearest (0.2%)</title><rect x="1187.9" y="142" width="2.0" height="16" fill="rgb(224,168,89)" rx="2"/>
+</g>
+<g><title>ThreadPool::run (0.2%)</title><rect x="1187.9" y="125" width="2.0" height="16" fill="rgb(218,144,77)" rx="2"/>
+</g>
+<g><title>ThreadPool::call&lt;check_nearest(GridView&lt;long long const&gt;, char const*, ThreadPool*, Schedule, int)::$_0&gt; (0.1%)</title><rect x="1187.9" y="108" width="1.5" height="16" fill="rgb(213,122,66)" rx="2"/>
+</g>
+</svg>
