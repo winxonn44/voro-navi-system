@@ -147,6 +147,23 @@ voronav::Schedule parse_schedule(const std::string& name) {
   throw std::invalid_argument("schedule must be 'static' or 'dynamic', got '" + name + "'");
 }
 
+voronav::Kernel parse_kernel(const std::string& name) {
+  if (name == "auto") {
+    return voronav::Kernel::Auto;
+  }
+  if (name == "reference") {
+    return voronav::Kernel::Reference;
+  }
+  if (name == "split") {
+    return voronav::Kernel::Split;
+  }
+  if (name == "packed") {
+    return voronav::Kernel::Packed;
+  }
+  throw std::invalid_argument("kernel must be 'auto', 'reference', 'split' or 'packed', got '" +
+                              name + "'");
+}
+
 constexpr int kMaxThreads = 1024;
 
 unsigned hardware_threads() {
@@ -279,23 +296,46 @@ PYBIND11_MODULE(_core, m) {
   m.def(
       "run_steps",
       [](const py::object& init, const std::vector<int>& steps, const std::optional<int>& threads,
-         const std::string& schedule, int chunk) {
+         const std::string& schedule, int chunk, const std::string& kernel) {
         const auto v = strict_int64_view(init, "run_steps");
         const voronav::Schedule sch = parse_schedule(schedule);
+        const voronav::Kernel ker = parse_kernel(kernel);
         voronav::ThreadPool* pool = pool_for(resolve_threads(threads));  // GIL held
-        return compute([v, &steps, pool, sch, chunk] {
-          return voronav::run_steps(v, steps, pool, sch, chunk);
+        return compute([v, &steps, pool, sch, chunk, ker] {
+          return voronav::run_steps(v, steps, pool, sch, chunk, ker);
         });
       },
       py::arg("init"), py::arg("steps"), py::arg("threads") = 1, py::arg("schedule") = "dynamic",
-      py::arg("chunk") = voronav::kDefaultChunk,
+      py::arg("chunk") = voronav::kDefaultChunk, py::arg("kernel") = "auto",
       "JFA: one double-buffered pass per step, bit-identical to "
-      "jfa_numpy.run_steps for every threads/schedule/chunk. init: "
+      "jfa_numpy.run_steps for every threads/schedule/chunk/kernel. init: "
       "C-contiguous int64 [H, W] of -1 or flat site indices. threads: 1 "
       "(serial, the default), n > 1 (a cached pool of n threads), or None "
       "(all hardware threads). schedule: 'dynamic' (rows claimed `chunk` at "
       "a time from a shared counter) or 'static' (equal contiguous blocks). "
-      "Returns a new int64 [H, W] array.");
+      "kernel: 'auto' (the default: 'packed' when both sides are <= 32767, "
+      "else 'split'), 'packed' (int16 (y, x) layout, division-free; raises "
+      "ValueError above 32767 px per side), 'split' (int64, interior without "
+      "bounds checks) or 'reference' (the C1 kernel). Returns a new int64 "
+      "[H, W] array.");
+
+  m.def(
+      "resolve_kernel",
+      [](int height, int width, const std::string& kernel) {
+        switch (voronav::resolve_kernel(height, width, parse_kernel(kernel))) {
+          case voronav::Kernel::Reference:
+            return std::string("reference");
+          case voronav::Kernel::Split:
+            return std::string("split");
+          case voronav::Kernel::Packed:
+            return std::string("packed");
+          default:
+            return std::string("auto");
+        }
+      },
+      py::arg("height"), py::arg("width"), py::arg("kernel") = "auto",
+      "The kernel run_steps uses for an H x W grid ('auto' resolved to "
+      "'packed' or 'split').");
 
   m.def("hardware_threads", &hardware_threads,
         "std::thread::hardware_concurrency() (at least 1): what threads=None uses.");

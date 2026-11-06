@@ -57,11 +57,37 @@ std::vector<int> step_schedule(int height, int width, Variant variant);
 // otherwise each pass is split over the pool's threads by rows with
 // `schedule` and `chunk` (rows per dynamic claim). The result is the same in
 // every case. Throws std::invalid_argument if init holds anything but
-// kNoSite or an index in [0, H * W), or if chunk < 1.
+// kNoSite or an index in [0, H * W), if chunk < 1, or for Kernel::Packed on a
+// grid with a side above kPackedMaxSide.
+//
+// `kernel` picks the per-pass implementation (checkpoint C4, docs/CORE.md
+// "Optimization log"); every kernel gives the same bits:
+//   Reference: the C1 kernel, jfa_pass_rows below: flat int64 buffers, a
+//              bounds check and an int64 division s / W per candidate.
+//   Split:     flat int64, but each row is cut into segments where the set of
+//              in-bounds candidates is constant, so the interior (all 9
+//              candidates in bounds) runs with no bounds checks at all.
+//   Packed:    Split's loop structure over an internal int32 layout that
+//              stores a site as (y << 16) | x, so decoding it is a shift and
+//              a mask instead of a division, and a buffer is half the size.
+//              Converted from / to the flat int64 contract once per call.
+//              Only for sides <= kPackedMaxSide; throws above that.
+//   Auto:      Packed when both sides fit, else Split (the fallback).
 inline constexpr int kDefaultChunk = 4;  // as jfa_numba.DEFAULT_CHUNK
+enum class Kernel : std::uint8_t { Auto, Reference, Split, Packed };
+
+// Largest side the Packed layout handles: y and x must fit in 15 bits so the
+// packed value stays a non-negative int32 and orders like the flat index, and
+// the squared distance (at most 2 * 32766^2 < 2^31) fits in 32 bits.
+inline constexpr int kPackedMaxSide = 32767;
+
+// The kernel run_steps uses for an H x W grid: Auto becomes Packed or Split,
+// anything else is returned as is.
+[[nodiscard]] Kernel resolve_kernel(int height, int width, Kernel kernel) noexcept;
+
 Grid<int64_t> run_steps(GridView<const int64_t> init, std::span<const int> steps,
                         ThreadPool* pool = nullptr, Schedule schedule = Schedule::Dynamic,
-                        int chunk = kDefaultChunk);
+                        int chunk = kDefaultChunk, Kernel kernel = Kernel::Auto);
 
 // One pass with step k over rows [y0, y1) of out: the kernel run_steps
 // splits across threads. Public for benchmarks that drive passes themselves

@@ -6,17 +6,20 @@ grid planners, ported from the Python package and callable from it with
 repository, so `pip install -e .` for the main package stays pure Python and
 never needs a compiler.
 
-**Status: checkpoint C3 (thread pool).** The C++ API has the `Grid` /
+**Status: checkpoint C4 (optimization log).** The C++ API has the `Grid` /
 `GridView` types, JFA (`init_nearest`, `step_schedule`, `run_steps`,
 `distance_sq` in `jfa.hpp`), the brute-force oracle (`brute_force` in
 `oracle.hpp`) and a reusable `ThreadPool` with static and dynamic row
 schedules (`thread_pool.hpp`). `run_steps(init, steps, pool, schedule,
-chunk)` is serial with `pool == nullptr` and gives the same bits for every
-thread count, schedule and chunk. All of it is bound to Python
+chunk, kernel)` is serial with `pool == nullptr` and gives the same bits for
+every thread count, schedule, chunk and kernel. C4 added three kernels
+(`Kernel::Split`, `Kernel::Packed`, and `Kernel::Auto`, which is the default)
+next to the C1 one (`Kernel::Reference`); the default is about 3× faster than
+the reference kernel serially and at 10 threads. All of it is bound to Python
 (`voronav_core.<name>`), and `make_runner(..., backend="cpp", threads=...,
 schedule=...)` runs it, bit-identical to the NumPy reference
-(`tests/test_cpp_parity.py`). Timings, pool overhead and strong scaling are
-in [docs/CORE.md](../docs/CORE.md).
+(`tests/test_cpp_parity.py`). Timings, the optimization log, pool overhead
+and strong scaling are in [docs/CORE.md](../docs/CORE.md).
 
 ## Layout
 
@@ -59,7 +62,10 @@ ctest --test-dir core/build --output-on-failure
 ```
 
 `compile_commands.json` lands in `core/build/` for clangd and clang-tidy.
-Run the benchmarks with `core/build/bench/core_bench`.
+Run the benchmarks with `core/build/bench/core_bench`; for timings use a
+`Release` build and `scripts/bench_core_kernels.py`, which runs each
+configuration in its own process with cool-downs and saves raw JSONL
+(docs/CORE.md, "Optimization log").
 
 CMake options (all `-D...=ON/OFF`):
 
@@ -149,8 +155,11 @@ its copy of the input, 1% sites, `jfa+2`; median of 20 repetitions, Apple Clang
 | 512² | 11 | 28.4 ms | 0.7 ms |
 
 This is the unoptimized baseline of design doc A7 #1: one thread, bounds
-checks on every candidate and an int64 division per candidate. Comparisons
-with the NumPy, Numba and Metal backends belong to C4.
+checks on every candidate and an int64 division per candidate. It is still
+available as `Kernel::Reference` (`BM_JfaKernel/<v>/<d>/1/...`);
+`BM_RunStepsSerial` now runs the default kernel, so its numbers since C4 are
+not comparable with this table. The C4 kernels and the comparison with NumPy,
+Numba and Metal are in [docs/CORE.md](../docs/CORE.md).
 
 ## Install into Python
 
@@ -186,13 +195,28 @@ import voronav_core as core
 init = core.init_nearest(sites)                        # sites: bool [H, W]
 steps = core.step_schedule(*sites.shape, "jfa+2")
 out = core.run_steps(init, steps)                      # serial
-out = core.run_steps(init, steps, threads=8, schedule="dynamic", chunk=4)  # same bits
+out = core.run_steps(init, steps, threads=10, schedule="dynamic", chunk=4)  # same bits
+out = core.run_steps(init, steps, kernel="reference")  # the C1 kernel, same bits
+core.resolve_kernel(*sites.shape)                      # 'packed' (or 'split' above 32767 px)
 ```
 
-`threads=1` (the default) is the serial path; `threads=n` uses a pool of `n`
-threads that the module creates on first use and keeps for later calls (one
-per thread count); `threads=None` uses `core.hardware_threads()`. In
-`make_runner`, `threads=None` means all cores, as for Numba.
+`run_steps` options (all give identical output):
+
+| Option | Values | Default | Meaning |
+| --- | --- | --- | --- |
+| `threads` | `1`, `n > 1`, `None` | `1` | `1` is the serial path; `n` uses a pool of `n` threads that the module creates on first use and keeps for later calls (one per thread count); `None` uses `core.hardware_threads()`. |
+| `schedule` | `"dynamic"`, `"static"` | `"dynamic"` | Dynamic: participants claim `chunk` rows at a time from a shared atomic counter. Static: equal contiguous blocks. Dynamic is faster on the M4's mixed P/E cores (static is 15–25% slower at 10 threads). |
+| `chunk` | `>= 1` | `4` | Rows per dynamic claim. Ignored by static. 1–8 are equally fast at 1024² and 2048²; 16–32 are slightly slower at 10 threads (docs/CORE.md, H3). |
+| `kernel` | `"auto"`, `"packed"`, `"split"`, `"reference"` | `"auto"` | `packed`: an internal int32 layout storing a site as `(y << 16) \| x` (no division to decode), with branch-free, vectorized loops for every row segment. Only for sides ≤ 32,767 px; raises `ValueError` above. `split`: the flat int64 layout with the interior/border split (no bounds checks). `reference`: the C1 kernel. `auto` is `packed` when both sides fit and `split` otherwise. |
+
+In `make_runner`, `threads=None` means all cores, as for Numba, and the
+kernel is always `auto`.
+
+In C++ the same options are the trailing arguments of `run_steps(init,
+steps, pool, schedule, chunk, kernel)`. `ThreadPool(n, WorkerQos)` also takes
+a worker QoS class (`WorkerQos::UserInteractive` sets
+`QOS_CLASS_USER_INTERACTIVE` on macOS workers). It is a measured non-win
+(docs/CORE.md, H5), so the Python module doesn't expose it.
 
 To uninstall: `.venv/bin/pip uninstall voronav-core`.
 

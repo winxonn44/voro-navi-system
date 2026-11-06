@@ -7,9 +7,30 @@
 #include <stdexcept>
 #include <thread>
 
+#if defined(__APPLE__)
+#include <pthread.h>
+#include <sys/qos.h>
+#endif
+
 namespace voronav {
 
-ThreadPool::ThreadPool(unsigned n_threads) : n_threads_(n_threads) {
+namespace {
+
+void apply_qos(WorkerQos qos) noexcept {
+#if defined(__APPLE__)
+  if (qos == WorkerQos::UserInteractive) {
+    // Fails only for an invalid class; nothing to recover, the worker just
+    // keeps its default class.
+    static_cast<void>(pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0));
+  }
+#else
+  static_cast<void>(qos);
+#endif
+}
+
+}  // namespace
+
+ThreadPool::ThreadPool(unsigned n_threads, WorkerQos qos) : n_threads_(n_threads), qos_(qos) {
   if (n_threads == 0) {
     throw std::invalid_argument("ThreadPool: n_threads must be >= 1");
   }
@@ -68,6 +89,7 @@ void ThreadPool::worker_loop(unsigned index) noexcept {
   // job before this thread got here, and loading would skip it. Every worker
   // starts from the constructor's value, 0.
   std::uint32_t seen = 0;
+  apply_qos(qos_);  // qos_ is set before the thread starts
   for (;;) {
     generation_.wait(seen, std::memory_order_acquire);  // returns once it differs
     seen = generation_.load(std::memory_order_acquire);

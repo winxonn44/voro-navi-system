@@ -178,5 +178,5 @@ jobs:
       - name: Run at 256^2
         run: >
           core/build/bench/core_bench
-          --benchmark_filter='/256$'
+          --benchmark_filter='/256(/real_time)?$'
           --benchmark_min_time=0.05s

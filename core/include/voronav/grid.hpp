@@ -5,9 +5,12 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <memory>
+#include <new>
 #include <span>
 #include <stdexcept>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 namespace voronav {
@@ -46,6 +49,39 @@ struct GridView {
   [[nodiscard]] std::span<T> flat() const noexcept { return {data, size()}; }
 };
 
+// Tag for Grid(h, w, kUninitialized): allocate without writing the cells.
+// For buffers every cell of which is written before it is read (the JFA
+// ping-pong buffers): it skips a serial memset, and the pages are first
+// touched by the parallel pass that fills them (docs/CORE.md, H6).
+struct Uninitialized {
+  explicit Uninitialized() = default;
+};
+inline constexpr Uninitialized kUninitialized{};
+
+// std::allocator, except that value-less construction default-initializes
+// (leaves a trivial T indeterminate) instead of value-initializing (zeroing).
+// Every other construction is unchanged, so Grid(h, w, fill) still fills.
+template <typename T>
+struct DefaultInitAllocator : std::allocator<T> {
+  using value_type = T;
+  template <typename U>
+  struct rebind {
+    using other = DefaultInitAllocator<U>;
+  };
+  DefaultInitAllocator() noexcept = default;
+  template <typename U>  // implicit, like std::allocator's converting constructor
+  DefaultInitAllocator(const DefaultInitAllocator<U>& /*other*/) noexcept {}
+
+  template <typename U>
+  void construct(U* p) noexcept(std::is_nothrow_default_constructible_v<U>) {
+    ::new (static_cast<void*>(p)) U;
+  }
+  template <typename U, typename... Args>
+  void construct(U* p, Args&&... args) {
+    ::new (static_cast<void*>(p)) U(std::forward<Args>(args)...);
+  }
+};
+
 // Owning H x W grid. Moving it keeps the buffer address, so a view (or a NumPy
 // array wrapping data()) stays valid across a move.
 template <typename T>
@@ -56,6 +92,11 @@ class Grid {
       : height_(check_dim(height)),
         width_(check_dim(width)),
         data_(static_cast<std::size_t>(height) * static_cast<std::size_t>(width), fill) {}
+  // Cells left indeterminate (see Uninitialized): write each before reading it.
+  Grid(int height, int width, Uninitialized /*tag*/)
+      : height_(check_dim(height)), width_(check_dim(width)) {
+    data_.resize(static_cast<std::size_t>(height) * static_cast<std::size_t>(width));
+  }
 
   [[nodiscard]] int height() const noexcept { return height_; }
   [[nodiscard]] int width() const noexcept { return width_; }
@@ -92,7 +133,7 @@ class Grid {
 
   int height_ = 0;
   int width_ = 0;
-  std::vector<T> data_;
+  std::vector<T, DefaultInitAllocator<T>> data_;
 };
 
 // Deep copy of a view into a new owning grid.

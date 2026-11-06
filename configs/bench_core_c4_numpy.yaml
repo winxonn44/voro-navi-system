@@ -1,0 +1,18 @@
+# NumPy reference for the C4 comparison, on the headline input only
+# (jfa+1, 0.1% sites): about 4 s per call at 2048^2, so 20 repeats here are
+# about 2 minutes of single-core load. Run in the same session as
+# bench_core_c4.yaml.
+map:
+  kind: points
+
+bench:
+  sizes: [1024, 2048]
+  site_densities: [0.001]
+  backends: [numpy]
+  variants: [jfa+1]
+  repeats: 20
+  warmup: 1
+  measure_error: false
+  seed: 0
+  cooldown_s: 2.0
+  out_dir: runs/bench_core_c4_numpy

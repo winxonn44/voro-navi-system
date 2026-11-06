@@ -164,3 +164,42 @@ def test_uint8_sites_treat_any_nonzero_byte_as_a_site():
     sites[1, 2], sites[3, 4] = 1, 255
     assert np.array_equal(core.init_nearest(sites), init_nearest(sites.astype(bool)))
     assert np.array_equal(core.brute_force(sites), brute_force(sites.astype(bool)))
+
+
+# The C4 kernels: every kernel the core can be told to use gives the NumPy
+# result. 'auto' (the default, used by every test above) is 'packed' at these
+# sizes; 'split' is its fallback above 32767 px per side.
+KERNELS = ["reference", "split", "packed", "auto"]
+
+
+@pytest.mark.parametrize("kernel", KERNELS)
+def test_every_kernel_matches_numpy(kernel):
+    # Sides 1-6 have no interior at most steps; the rest mix both.
+    shapes = [(h, w) for h in (1, 2, 3, 5, 6) for w in (1, 2, 4, 6)]
+    shapes += [(12, 13), (31, 33), (2, 90), (90, 3), (64, 64), (97, 131)]
+    for shape in shapes:
+        for density in (0.0, 0.01, 0.1, 1.0):
+            sites = _sites(shape, density, seed=5)
+            init = init_nearest(sites)
+            for variant in VARIANTS:
+                steps = step_schedule(*shape, variant)
+                ref = jfa_numpy.run_steps(init, steps)
+                for threads in (1, 4):
+                    out = core.run_steps(init, steps, threads, "dynamic", 4, kernel)
+                    assert np.array_equal(out, ref), (shape, density, variant, threads, kernel)
+
+
+def test_kernel_fallback_above_the_packed_limit():
+    assert core.resolve_kernel(32767, 32767) == "packed"
+    assert core.resolve_kernel(1, 32768) == "split"
+    assert core.resolve_kernel(32768, 1, "reference") == "reference"
+    sites = np.zeros((1, 32768), dtype=bool)
+    sites[0, [0, 5000, 32767]] = True
+    init = init_nearest(sites)
+    steps = step_schedule(1, 32768, "jfa+1")
+    ref = jfa_numpy.run_steps(init, steps)
+    assert np.array_equal(core.run_steps(init, steps), ref)  # auto -> split
+    with pytest.raises(ValueError, match="32767"):
+        core.run_steps(init, steps, kernel="packed")
+    with pytest.raises(ValueError, match="kernel must be"):
+        core.run_steps(init, steps, kernel="simd")

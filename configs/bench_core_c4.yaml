@@ -1,0 +1,25 @@
+# Final C4 comparison (docs/CORE.md, "Optimization log"): the optimized C++
+# core (default kernel, i.e. packed + SIMD) next to Numba (1 and 10 threads,
+# static and dynamic) and PyTorch MPS (the fused Metal kernel), in one
+# session, on the design doc's A6 inputs. Needs `pip install -e ./core`.
+# About 3 minutes of load with 2 s cool-downs. NumPy is in
+# bench_core_c4_numpy.yaml and 4096^2 in bench_core_c4_4096.yaml.
+map:
+  kind: points
+
+bench:
+  sizes: [1024, 2048]
+  site_densities: [0.001, 0.01]
+  backends: [numba, torch, cpp]
+  variants: [jfa+1, jfa+2]
+  numba_threads: [1, 10]
+  numba_schedules: [static, dynamic]
+  cpp_threads: [1, 10]
+  cpp_schedules: [static, dynamic]
+  torch_devices: [mps]
+  repeats: 20
+  warmup: 2
+  measure_error: false
+  seed: 0
+  cooldown_s: 2.0
+  out_dir: runs/bench_core_c4

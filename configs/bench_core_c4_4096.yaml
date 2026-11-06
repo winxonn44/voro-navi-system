@@ -1,0 +1,22 @@
+# 4096^2 rows for the final C4 table: C++ serial and 10 threads (dynamic),
+# Numba 10 threads (dynamic) and MPS. Two 128 MB int64 buffers per backend;
+# about 2 minutes of load.
+map:
+  kind: points
+
+bench:
+  sizes: [4096]
+  site_densities: [0.001, 0.01]
+  backends: [numba, torch, cpp]
+  variants: [jfa+1, jfa+2]
+  numba_threads: [10]
+  numba_schedules: [dynamic]
+  cpp_threads: [1, 10]
+  cpp_schedules: [dynamic]
+  torch_devices: [mps]
+  repeats: 20
+  warmup: 2
+  measure_error: false
+  seed: 0
+  cooldown_s: 2.0
+  out_dir: runs/bench_core_c4_4096

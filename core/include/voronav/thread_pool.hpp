@@ -63,11 +63,20 @@ namespace voronav {
 
 enum class Schedule : std::uint8_t { Static, Dynamic };
 
+// Scheduling class for the pool's worker threads (design doc A7 #6). macOS
+// cannot pin a thread to a core, but a QoS class steers it: Default leaves
+// the workers as std::thread creates them; UserInteractive calls
+// pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0) in each worker
+// before its first job, the class macOS prefers to run on performance cores.
+// Elsewhere UserInteractive is accepted and does nothing. The calling thread
+// (participant 0) is never changed. Results do not depend on it.
+enum class WorkerQos : std::uint8_t { Default, UserInteractive };
+
 class ThreadPool {
  public:
   // n_threads >= 1 participants, the caller included (n_threads - 1 workers
   // are spawned here). Throws std::invalid_argument for 0.
-  explicit ThreadPool(unsigned n_threads);
+  explicit ThreadPool(unsigned n_threads, WorkerQos qos = WorkerQos::Default);
   // Stops and joins every worker. Must not run concurrently with
   // parallel_rows.
   ~ThreadPool();
@@ -79,6 +88,7 @@ class ThreadPool {
 
   // Number of participants (workers + the calling thread).
   [[nodiscard]] unsigned size() const noexcept { return n_threads_; }
+  [[nodiscard]] WorkerQos qos() const noexcept { return qos_; }
 
   // Calls fn(begin, end) on disjoint row ranges covering [0, rows) exactly
   // once, spread over the participants by `schedule`, and returns when all
@@ -107,6 +117,7 @@ class ThreadPool {
   static constexpr std::size_t kLine = 128;
 
   unsigned n_threads_;
+  WorkerQos qos_;
   std::mutex run_mutex_;  // one parallel_rows at a time
 
   // The current job. Plain fields: written by the caller before the release

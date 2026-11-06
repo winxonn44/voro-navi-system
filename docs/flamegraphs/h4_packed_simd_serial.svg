@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="121" font-family="Menlo,monospace" font-size="11">
+<rect width="100%" height="100%" fill="#fdfdf6"/>
+<text x="10" y="20" font-size="14">H4 Packed + SIMD (final), serial, 2048^2 jfa+1 0.1%</text>
+<text x="10" y="34" fill="#555">3982 samples; width = share of samples under the benchmark loop</text>
+<g><title>run_steps (100.0%)</title><rect x="10.0" y="74" width="1180.0" height="16" fill="rgb(222,160,85)" rx="2"/>
+<text x="13.0" y="86">run_steps (100.0%)</text>
+</g>
+<g><title>Grid&lt;int&gt;::Grid (0.6%)</title><rect x="10.0" y="57" width="6.8" height="16" fill="rgb(219,148,79)" rx="2"/>
+</g>
+<g><title>Grid&lt;long long&gt;::Grid (0.5%)</title><rect x="16.8" y="57" width="5.3" height="16" fill="rgb(222,158,84)" rx="2"/>
+</g>
+<g><title>check_nearest (1.1%)</title><rect x="22.1" y="57" width="12.4" height="16" fill="rgb(224,168,89)" rx="2"/>
+</g>
+<g><title>from_packed_rows (1.0%)</title><rect x="34.6" y="57" width="11.3" height="16" fill="rgb(215,132,71)" rx="2"/>
+</g>
+<g><title>pass_rows_packed (96.2%)</title><rect x="45.9" y="57" width="1135.0" height="16" fill="rgb(217,138,74)" rx="2"/>
+<text x="48.9" y="69">pass_rows_packed (96.2%)</text>
+</g>
+<g><title>packed_segment&lt;false, true&gt; (5.8%)</title><rect x="45.9" y="40" width="67.9" height="16" fill="rgb(222,160,85)" rx="2"/>
+<text x="48.9" y="52">packed_s..</text>
+</g>
+<g><title>packed_segment&lt;true, false&gt; (5.5%)</title><rect x="113.7" y="40" width="65.5" height="16" fill="rgb(222,160,85)" rx="2"/>
+<text x="116.7" y="52">packed_..</text>
+</g>
+<g><title>packed_segment&lt;true, true&gt; (84.9%)</title><rect x="179.2" y="40" width="1001.3" height="16" fill="rgb(205,90,50)" rx="2"/>
+<text x="182.2" y="52">packed_segment&lt;true, true&gt; (84.9%)</text>
+</g>
+<g><title>to_packed_rows (0.8%)</title><rect x="1180.8" y="57" width="9.2" height="16" fill="rgb(211,114,62)" rx="2"/>
+</g>
+</svg>

@@ -19,6 +19,8 @@
 
 #if defined(__APPLE__)
 #include <mach/mach.h>
+#include <pthread.h>
+#include <sys/qos.h>
 #elif defined(__linux__)
 #include <filesystem>
 #endif
@@ -287,6 +289,40 @@ TEST(ThreadPool, DestructionJoinsEveryWorker) {
     }
   }
   EXPECT_LE(live_threads_settled(before), before);
+}
+
+TEST(ThreadPool, UserInteractiveQosReachesTheWorkersOnly) {
+  ThreadPool pool(3, WorkerQos::UserInteractive);
+  EXPECT_EQ(pool.qos(), WorkerQos::UserInteractive);
+  EXPECT_EQ(ThreadPool(2).qos(), WorkerQos::Default);
+  // Static, 3 rows over 3 participants: row i runs on participant i, and
+  // participant 0 is this thread.
+  std::array<std::thread::id, 3> who{};
+  [[maybe_unused]] std::array<int, 3> qos{};
+  auto fn = [&who, &qos](int begin, int end) noexcept {
+    for (int r = begin; r < end; ++r) {
+      who[static_cast<std::size_t>(r)] = std::this_thread::get_id();
+#if defined(__APPLE__)
+      qos_class_t c = QOS_CLASS_UNSPECIFIED;
+      static_cast<void>(pthread_get_qos_class_np(pthread_self(), &c, nullptr));
+      qos[static_cast<std::size_t>(r)] = static_cast<int>(c);
+#endif
+    }
+  };
+  pool.parallel_rows(3, Schedule::Static, 1, fn);
+  EXPECT_EQ(who[0], std::this_thread::get_id());
+  EXPECT_NE(who[1], who[0]);
+  EXPECT_NE(who[2], who[0]);
+#if defined(__APPLE__)
+  EXPECT_EQ(qos[1], static_cast<int>(QOS_CLASS_USER_INTERACTIVE));
+  EXPECT_EQ(qos[2], static_cast<int>(QOS_CLASS_USER_INTERACTIVE));
+  // The caller keeps whatever class it had (a terminal-launched main
+  // thread is often already USER_INTERACTIVE; std::thread workers start at
+  // DEFAULT).
+  qos_class_t mine = QOS_CLASS_UNSPECIFIED;
+  static_cast<void>(pthread_get_qos_class_np(pthread_self(), &mine, nullptr));
+  EXPECT_EQ(qos[0], static_cast<int>(mine));
+#endif
 }
 
 }  // namespace
