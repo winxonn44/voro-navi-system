@@ -1,11 +1,116 @@
 # voronav-core: results log
 
 Measured numbers for the optional C++ core (`core/`, see
-[core/README.md](../core/README.md) for the build). The C4 optimization log
-comes first; the C2 and C3 sections below it are kept as they were measured. Every row here was
+[core/README.md](../core/README.md) for the build). The newest checkpoint
+comes first: the C5 roadmap port, then the C4 optimization log; the C2 and C3
+sections are kept as they were measured. Every row here was
 checked bit-identical to the NumPy reference before it was timed: the test
 suite runs the `cpp` backend against NumPy with `np.array_equal` (see
 "Parity" below), so speedups carry no accuracy caveat.
+
+## Roadmap port (checkpoint C5, 2026-11-09)
+
+`build_roadmap` is now in C++ (`core/include/voronav/{roadmap,labeling,grid_search}.hpp`,
+on the C4 JFA kernel): `boundary_sites`, `obstacle_ids`, `gvd_mask`,
+`connect_pieces`, `build_roadmap`, and from `grid_search.py` only
+`reachable_components` and `source_field` (with its contacts). `search`,
+`roadmap_search`, `voronoi_plan` and `astar_plan` are C6. In Python,
+`build_roadmap(occ, ..., builder="cpp")` selects it; the default
+(`builder="python"`) and every Q1–Q4 result are unchanged. The Python builder
+stays the reference, and the code it matches is the current one: frame-aware
+`obstacle_ids` and clearance-weighted bridges, which the design doc predates.
+
+### Parity
+
+Every `Roadmap` field is compared with `array_equal` or `==`
+(`nearest`, `clearance`, `safe`, `skeleton`, `bridges`, `n_pruned`,
+`n_bridges`, `bridge_px`, `robot_radius`): no tolerance, on doubles too, in
+`tests/test_cpp_roadmap_parity.py` (210 tests).
+
+- **The 94 Q2 maps** (`configs/bench_q2.yaml`: `jfa+2`, robot radius 2,
+  `bridge_lam` 64): **all 94 identical, no mismatch** (24 synthetic, 50
+  MovingAI, 20 HouseExpo). Each was also compared at `bridge_lam` 0, whose
+  unit costs make ties everywhere in Dijkstra and the spanning tree: also
+  identical, so 188 comparisons. Only the 24 synthetic maps run on CI (the
+  other maps are downloaded; those tests skip without them), and the settings are
+  bench_q2.yaml's own. Run against Numba's JFA, so this also rests on
+  Numba = NumPy (`tests/test_backends_agree.py`).
+- 800 random maps with random radius, angle, slack, minimum piece, lambda and
+  variant (`jfa`, `jfa+1`, `jfa+2`, `1+jfa`; `jfa+2` is not exact, so each
+  side uses the same variant), plus degenerate maps (empty, all occupied,
+  one obstacle, 1×N, N×1) for all four variants.
+- Function by function against the Python, on random inputs: `boundary_sites`,
+  `obstacle_ids` (including every frame branch and shapes under 3 px),
+  `gvd_mask`, `reachable_components`, `connect_pieces`, and `source_field`
+  down to `parent`, `owner` and the contact lists.
+
+**How SciPy's behavior was reproduced** (tested directly against SciPy first):
+
+- `scipy.ndimage.label`: number components 1..n by first pixel in scan order,
+  plus-shaped or 3×3 structure. That order is what SciPy produces (checked on 600
+  random grids) and what `reachable_components` defines. It matters because
+  `obstacle_ids` takes the *largest* label around a frame pixel;
+  `maximum_filter(size=3, mode="reflect")` is a clamped 3×3 max.
+- `minimum_spanning_tree`: Kruskal over a stable sort by weight. SciPy's CSR
+  order is `(lo, hi)`, so ties go to the earlier pair; given that order, which
+  edges win depends only on connectivity, so union-find details need not
+  match (40 random graphs with weights 1–3, compared with SciPy). SciPy reads
+  a stored zero as no edge, so the C++ throws on a non-positive weight;
+  `connect_pieces`' costs are always ≥ 1 (an edge is at least one step).
+- Heap ties: `_push` / `_pop` are ported line by line. `std::priority_queue`
+  would pop equal keys in a different order. The exact pop order is pinned in
+  GoogleTest from the Numba code.
+- 4- vs 8-connectivity: free-space regions use the search's own move rule,
+  obstacles are 8-connected.
+- **Floating point**: `src/roadmap.cpp` and `src/grid_search.cpp` build with
+  `-ffp-contract=off`; a fused multiply-add rounds differently from Numba's
+  separate operations and could flip a tie. One test pins an actual rounding
+  case: `2 sin(30°)` evaluates to 0.9999999999999999, so `sep² = 4` passes
+  the wide-angle test where exact arithmetic would not; Python does the same.
+
+### Tests
+
+GoogleTest (no Python): **114 cases, 45 of them new** (`test_labeling.cpp`,
+`test_roadmap.cpp`), passing in the normal, ASan+UBSan and TSan builds with no
+reports. New ones cover hand-checked labeling (scan-order numbering, merges,
+diagonals), union-find against flood fill, the spanning tree against a
+quadratic Kruskal on tied graphs, the `gvd_mask` rule, degenerate maps, a
+50,000 px map that overflows int32 `d2`, determinism over 3 maps × 2 variants ×
+3 thread counts × 2 schedules × 3 chunks, and two `build_roadmap` outputs
+pinned from Python by hash (two rooms, corridor). `pytest` (with the C5
+parity file included): 764 passed, 1 skipped.
+
+The C++ build uses the same `(d2, site)` JFA as before, whose threads do not
+change the result; extraction after it is serial.
+
+### Timings
+
+`scripts/bench_core_roadmap.py`, raw rows in `docs/runs/c5_roadmap.jsonl`. Build
+time only (JFA plus extraction, the Q2 re-run is C6), median of 20 after one
+warm-up (min–max), 2 s cool-downs. `bench_q2.yaml`'s settings. M4 MacBook Air
+(fanless, 4P + 6E), **on AC power (77%)** for every row (the script refuses
+to run otherwise), macOS 26.2, Python 3.14.6, NumPy 2.5.4, SciPy 1.18.1, Numba
+0.68.0, Apple Clang 17.0.0, CMake `Release` (`-O3 -DNDEBUG`).
+
+| Map | Size | Python (Numba JFA, all threads) | C++ (all threads) | C++ (1 thread) | Python / C++ |
+| --- | --- | --- | --- | --- | --- |
+| random_obstacles | 256² | 15.8 ms (14.9–17.0) | 10.2 ms (9.1–15.7) | 9.4 ms (9.0–12.8) | **1.55×** |
+| random_obstacles | 512² | 66.8 ms (65.1–67.9) | 39.1 ms (37.5–43.3) | 43.5 ms (42.3–45.1) | **1.71×** |
+| random_obstacles | 1024² | 293.0 ms (287.2–406.3) | 166.4 ms (161.8–171.5) | 188.0 ms (184.6–195.0) | **1.76×** |
+| random_obstacles | 2048² | 1404.0 ms (1322.9–1698.2) | 737.0 ms (719.5–880.6) | 834.6 ms (822.2–872.3) | **1.91×** |
+| MovingAI maze512-16-0 | 512² | 44.9 ms (38.8–79.4) | 11.9 ms (9.9–16.8) | 20.1 ms (16.0–33.4) | **3.78×** |
+| MovingAI 16room_000 | 512² | 44.1 ms (37.7–74.4) | 11.0 ms (9.5–15.9) | 14.4 ms (12.7–19.1) | **4.00×** |
+| HouseExpo (one house) | 180×140 | 7.2 ms (6.6–8.2) | 3.9 ms (3.4–7.0) | 3.9 ms (3.5–6.6) | **1.83×** |
+
+**Reading it.** 1.5–4× for the whole build, largest on the two 512² real
+maps and lowest on the open synthetic ones (why was not broken down). The C4
+JFA is not the limit any more: on the
+1024² map (one quick stage measurement, 7 runs, not in the JSONL) JFA took 7
+ms of about 163, `gvd_mask` 9, the two component labelings about 10, and
+**`source_field` 128 ms** (the Dijkstra and its contacts). It is also why more
+threads barely help here: only the 7 ms JFA is parallel, 1 thread at 2048² is
+834.6 ms against 737.0 for all of them. Making that Dijkstra faster is open:
+faster keys would have to keep the exact tie order.
 
 ## Optimization log (checkpoint C4, 2026-11-05)
 
