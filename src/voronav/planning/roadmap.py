@@ -48,7 +48,7 @@ from scipy.sparse.csgraph import minimum_spanning_tree
 
 from ..maps import boundary_sites
 from .grid_search import reachable_components, source_field
-from ..voronoi import distance_sq, voronoi
+from ..voronoi import distance_sq, import_core, voronoi
 
 # Squared site separation must exceed this as well: adjacent and diagonal
 # wall pixels (sep^2 = 1 or 2) never form a GVD edge, while a one-pixel gap
@@ -239,13 +239,42 @@ def build_roadmap(
     backend: str = "numba",
     variant: str = "jfa+2",
     device: str = "cpu",
+    builder: str = "python",
 ) -> Roadmap:
     """Build the GVD roadmap. `jfa+2` is the default variant because it was
     exact on every Q1 instance; a wrong nearest site can break or bend the
-    skeleton, which matters more here than a few microseconds."""
+    skeleton, which matters more here than a few microseconds.
+
+    `builder="cpp"` builds it with the optional C++ core (JFA and extraction,
+    `core/`, see `voronoi.import_core`) instead: every field is identical to
+    the Python builder's with the same variant (tests/test_cpp_roadmap_parity.py).
+    The C++ builder runs its own JFA on all cores, so `backend` is ignored and
+    `device` must be "cpu"."""
     if occ.ndim != 2 or occ.dtype != bool:
         raise ValueError("occ must be a 2D bool array")
+    if builder not in ("python", "cpp"):
+        raise ValueError(f"builder must be 'python' or 'cpp', got {builder!r}")
     t0 = time.perf_counter()
+    if builder == "cpp":
+        if device != "cpu":
+            raise ValueError(f"builder='cpp' runs on the CPU, got device={device!r}")
+        r = import_core().build_roadmap(
+            np.ascontiguousarray(occ), robot_radius, min_angle_deg, raster_slack_px,
+            min_piece_px, bridge_lam, variant, threads=None,
+        )
+        return Roadmap(
+            occ=occ,
+            nearest=r["nearest"],
+            clearance=r["clearance"],
+            safe=r["safe"],
+            skeleton=r["skeleton"],
+            robot_radius=robot_radius,
+            build_s=time.perf_counter() - t0,
+            n_pruned=r["n_pruned"],
+            n_bridges=r["n_bridges"],
+            bridge_px=r["bridge_px"],
+            bridges=r["bridges"],
+        )
     nearest = voronoi(boundary_sites(occ), backend=backend, variant=variant, device=device)
     d2 = distance_sq(nearest)
     clearance = np.where(d2 >= 0, np.sqrt(np.maximum(d2, 0)), np.inf)
