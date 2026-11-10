@@ -483,7 +483,8 @@ TEST(BuildRoadmap, TwoRoomsMatchesPython) {
   EXPECT_EQ(r.n_pruned, 0);
   EXPECT_EQ(r.bridge_px, 9);
   int64_t nodes = 0;
-  for (const uint8_t cell : r.skeleton.view().flat()) {
+  const auto skeleton = r.skeleton.view();
+  for (const uint8_t cell : skeleton.flat()) {
     nodes += cell;
   }
   EXPECT_EQ(nodes, 559);
@@ -495,7 +496,8 @@ TEST(BuildRoadmap, CorridorMatchesPython) {
   const auto occ = corridor(40, 80, 10);
   const Roadmap r = voronav::build_roadmap(occ.view(), params_for(1.0));
   int64_t nodes = 0;
-  for (const uint8_t cell : r.skeleton.view().flat()) {
+  const auto skeleton = r.skeleton.view();
+  for (const uint8_t cell : skeleton.flat()) {
     nodes += cell;
   }
   EXPECT_EQ(nodes, 160);
