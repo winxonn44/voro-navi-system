@@ -87,13 +87,19 @@ endif()
 # The library: headers in include/voronav, sources in src.
 find_package(Threads REQUIRED)
 
-add_library(voronav_core STATIC src/jfa.cpp src/oracle.cpp src/thread_pool.cpp src/version.cpp)
+add_library(voronav_core STATIC src/grid_search.cpp src/jfa.cpp src/labeling.cpp src/oracle.cpp
+            src/roadmap.cpp src/thread_pool.cpp src/version.cpp)
 add_library(voronav::core ALIAS voronav_core)
 target_include_directories(voronav_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_compile_features(voronav_core PUBLIC cxx_std_20)
 target_compile_definitions(voronav_core PRIVATE
   VORONAV_CORE_VERSION="${PROJECT_VERSION}")
 target_link_libraries(voronav_core PUBLIC Threads::Threads PRIVATE voronav_warnings)
+# The roadmap compares doubles exactly against the Python (costs, thresholds):
+# no fused multiply-add, which rounds differently from NumPy and Numba's
+# separate operations. (GCC and Clang would otherwise contract on arm64.)
+set_source_files_properties(src/grid_search.cpp src/roadmap.cpp
+                            PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
 
 if(VORONAV_BUILD_TESTS)
   enable_testing()

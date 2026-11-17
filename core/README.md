@@ -6,7 +6,13 @@ grid planners, ported from the Python package and callable from it with
 repository, so `pip install -e .` for the main package stays pure Python and
 never needs a compiler.
 
-**Status: checkpoint C4 (optimization log).** The C++ API has the `Grid` /
+**Status: checkpoint C5 (roadmap).** `build_roadmap` is ported too
+(`roadmap.hpp`, `labeling.hpp`, `grid_search.hpp`): every `Roadmap` field equals
+the Python builder's exactly on the 94 Q2 benchmark maps, and Python selects it
+with `build_roadmap(occ, ..., builder="cpp")`. The search and planners are C6.
+Details and timings: [docs/CORE.md](../docs/CORE.md).
+
+The C++ API has the `Grid` /
 `GridView` types, JFA (`init_nearest`, `step_schedule`, `run_steps`,
 `distance_sq` in `jfa.hpp`), the brute-force oracle (`brute_force` in
 `oracle.hpp`) and a reusable `ThreadPool` with static and dynamic row
@@ -27,7 +33,7 @@ and strong scaling are in [docs/CORE.md](../docs/CORE.md).
 core/
 ├── CMakeLists.txt          # library, tests, benchmarks, Python module
 ├── pyproject.toml          # scikit-build-core; distribution "voronav-core"
-├── include/voronav/        # public headers: grid.hpp, jfa.hpp, oracle.hpp, thread_pool.hpp, version.hpp
+├── include/voronav/        # public headers: grid.hpp, jfa.hpp, oracle.hpp, thread_pool.hpp, roadmap.hpp, labeling.hpp, grid_search.hpp, version.hpp
 ├── src/                    # .cpp files matching the headers
 ├── tests/                  # GoogleTest (ctest)
 ├── bench/                  # Google Benchmark
@@ -219,6 +225,23 @@ a worker QoS class (`WorkerQos::UserInteractive` sets
 (docs/CORE.md, H5), so the Python module doesn't expose it.
 
 To uninstall: `.venv/bin/pip uninstall voronav-core`.
+
+## Roadmap
+
+```python
+import voronav_core as core
+from voronav.planning.roadmap import build_roadmap
+
+rm = build_roadmap(occ, robot_radius=2.0, bridge_lam=64.0, builder="cpp")  # a Roadmap
+d = core.build_roadmap(occ, robot_radius=2.0, bridge_lam=64.0, threads=10) # a dict of the fields
+```
+
+The C++ builder's default `threads` is 1; `builder="cpp"` runs on all cores.
+`threads`, `schedule` and `chunk` apply to the JFA passes and do not change the
+result. `core/include/voronav/roadmap.hpp` lists the parity rules (labels numbered
+in scan order, SciPy's spanning-tree tie order, the exact heap,
+`-ffp-contract=off`); `tests/test_cpp_roadmap_parity.py` checks them against the
+Python on the Q2 maps and random inputs.
 
 ## Formatting and static analysis
 
